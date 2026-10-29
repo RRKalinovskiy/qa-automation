@@ -1,0 +1,35 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Проектные навыки: сценарии, тестовые данные, UI- и API-автотесты.
+  // Глобальные навыки Postman подключаются плагином postman-plugin.
+  "skills": ["./.opencode/skills"],
+
+  // Локальный MCP для проверок Saby. Авторизация: npm run saby:login
+  // (storageState в .auth/saby.json, файл в .gitignore).
+  "mcp": {
+    "saby-checks": {
+      "type": "local",
+      "command": ["node", "mcp/saby-checks/server.mjs"],
+      "enabled": true,
+      "environment": {
+        "SABY_BASE_URL": "https://online.sbis.ru",
+        "SABY_STORAGE_STATE": ".auth/saby.json"
+      }
+    }
+  },
+
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" }
+  ],
+
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      "test-results/**",
+      "playwright-report/**",
+      "blob-report/**",
+      ".auth/**"
+    ]
+  }
+}
