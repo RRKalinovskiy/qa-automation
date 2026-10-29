@@ -15,6 +15,7 @@ import { z } from 'zod';
 import 'dotenv/config';
 
 import { CheckService, DEFAULT_TEMPLATE_ID } from './checks.mjs';
+import { ProjectService, DEFAULT_PROJECT_BASE_URL } from './project.mjs';
 import { SabyClient, SabyError } from './client.mjs';
 import { DEFAULT_STATUSES } from './statuses.mjs';
 import {
@@ -30,12 +31,28 @@ const server = new McpServer({
 });
 
 let service;
+let projectService;
 
 function getService() {
   if (!service) {
     service = new CheckService(new SabyClient());
   }
   return service;
+}
+
+function getProjectService() {
+  if (!projectService) {
+    const baseUrl =
+      process.env.SABY_PROJECT_BASE_URL || DEFAULT_PROJECT_BASE_URL;
+    projectService = new ProjectService(
+      new SabyClient({
+        baseUrl,
+        cookie: process.env.SABY_PROJECT_COOKIE || undefined,
+      }),
+      { baseUrl },
+    );
+  }
+  return projectService;
 }
 
 function ok(data) {
@@ -79,6 +96,15 @@ const checkRef = z
   .string()
   .min(1)
   .describe('Проверка: числовой id, guid или ссылка /doc/<guid>');
+
+const projectRef = z
+  .string()
+  .min(1)
+  .describe('Проект: uuid, числовой id или ссылка project.sbis.ru/uuid/...');
+
+const projectDocumentRef = z
+  .union([z.string(), z.number()])
+  .describe('Документ проекта: attachId, название или имя файла');
 
 const statusValue = z
   .union([z.string(), z.number()])
@@ -195,6 +221,202 @@ server.registerTool(
     annotations: { readOnlyHint: true },
   },
   async () => ok(rulesSummary()),
+);
+
+server.registerTool(
+  'saby_project_get',
+  {
+    title: 'Прочитать проект',
+    description:
+      'Только чтение. Возвращает карточку проекта Saby: название, описание, статус, сроки, ' +
+      'ответственного, этапы и ссылку. Рабочий проект не изменяется.',
+    inputSchema: z.object({
+      project: projectRef,
+    }),
+    annotations: { readOnlyHint: true },
+  },
+  async ({ project }) => {
+    try {
+      return ok(await getProjectService().readProject(project));
+    } catch (error) {
+      return fail(error);
+    }
+  },
+);
+
+server.registerTool(
+  'saby_project_documents',
+  {
+    title: 'Документы проекта',
+    description:
+      'Только чтение. Возвращает документы проекта: attachId, название, файл, тип, дату, ' +
+      'ответственного и актуальную редакцию. Рабочий проект не изменяется.',
+    inputSchema: z.object({
+      project: projectRef,
+    }),
+    annotations: { readOnlyHint: true },
+  },
+  async ({ project }) => {
+    try {
+      const projectInfo = await getProjectService().readProject(project);
+      const documents = await getProjectService().listDocuments(projectInfo);
+      return ok({
+        project: {
+          id: projectInfo.id,
+          uuid: projectInfo.uuid,
+          title: projectInfo.title,
+          url: projectInfo.url,
+        },
+        documents,
+      });
+    } catch (error) {
+      return fail(error);
+    }
+  },
+);
+
+server.registerTool(
+  'saby_project_document_read',
+  {
+    title: 'Прочитать документ проекта',
+    description:
+      'Только чтение. Читает SabyDoc проекта по attachId/названию, возвращает текст, ' +
+      'оглавление и извлечённые требования. Рабочий проект не изменяется.',
+    inputSchema: z.object({
+      project: projectRef,
+      document: projectDocumentRef,
+      maxChars: z.number().int().min(500).max(100000).default(20000),
+      maxRequirements: z.number().int().min(1).max(200).default(40),
+    }),
+    annotations: { readOnlyHint: true },
+  },
+  async ({ project, document, maxChars, maxRequirements }) => {
+    try {
+      const result = await getProjectService().readDocument(project, document, {
+        maxChars,
+        maxRequirements,
+      });
+      return ok(result);
+    } catch (error) {
+      return fail(error);
+    }
+  },
+);
+
+server.registerTool(
+  'saby_project_requirements',
+  {
+    title: 'Требования проекта',
+    description:
+      'Только чтение. Извлекает требования (Т) из SabyDoc проекта: ТЗ, логического описания ' +
+      'макета и других документов. Возвращает разделы, формулировки, источник и уверенность. ' +
+      'Рабочий проект не изменяется.',
+    inputSchema: z.object({
+      project: projectRef,
+      document: projectDocumentRef.optional(),
+      maxDocuments: z.number().int().min(1).max(10).default(3),
+      maxRequirements: z.number().int().min(1).max(200).default(60),
+    }),
+    annotations: { readOnlyHint: true },
+  },
+  async ({ project, document, maxDocuments, maxRequirements }) => {
+    try {
+      const result = await getProjectService().readRequirements(project, {
+        document,
+        maxDocuments,
+        maxRequirements,
+      });
+      return ok(result);
+    } catch (error) {
+      return fail(error);
+    }
+  },
+);
+
+server.registerTool(
+  'saby_project_map',
+  {
+    title: 'Карта функционала проекта',
+    description:
+      'Только чтение. Строит карту проекта: этапы, документы, требования и привязку требований ' +
+      'к этапам. Рабочий проект не изменяется.',
+    inputSchema: z.object({
+      project: projectRef,
+      includeDocuments: z.boolean().default(true),
+      includeRequirements: z.boolean().default(true),
+      maxDocuments: z.number().int().min(1).max(10).default(3),
+      maxRequirements: z.number().int().min(1).max(200).default(60),
+      maxPerStage: z.number().int().min(1).max(100).default(12),
+    }),
+    annotations: { readOnlyHint: true },
+  },
+  async ({
+    project,
+    includeDocuments,
+    includeRequirements,
+    maxDocuments,
+    maxRequirements,
+    maxPerStage,
+  }) => {
+    try {
+      const result = await getProjectService().buildMap(project, {
+        includeDocuments,
+        includeRequirements,
+        maxDocuments,
+        maxRequirements,
+        maxPerStage,
+      });
+      return ok(result);
+    } catch (error) {
+      return fail(error);
+    }
+  },
+);
+
+server.registerTool(
+  'saby_project_check_draft',
+  {
+    title: 'Черновик проверки по проекту',
+    description:
+      'Только чтение. Формирует черновик проверки из этапов и требований проекта: этапы → ' +
+      'пункты типа Т. Ничего не создаёт. После согласования сценарий можно передать в ' +
+      'saby_check_import_scenario с dryRun=true. Рабочий проект не изменяется.',
+    inputSchema: z.object({
+      project: projectRef,
+      includeDocuments: z.boolean().default(true),
+      includeRequirements: z.boolean().default(true),
+      categories: z
+        .array(z.enum(['ui', 'general', 'technical']))
+        .default(['ui', 'general'])
+        .describe(
+          'Какие требования включать в черновик: ui/general по умолчанию, technical — по запросу',
+        ),
+      maxRequirements: z.number().int().min(1).max(200).default(30),
+      maxPerSection: z.number().int().min(1).max(100).default(12),
+    }),
+    annotations: { readOnlyHint: true },
+  },
+  async ({
+    project,
+    includeDocuments,
+    includeRequirements,
+    categories,
+    maxRequirements,
+    maxPerSection,
+  }) => {
+    try {
+      const result = await getProjectService().buildCheckDraft(project, {
+        includeDocuments,
+        includeRequirements,
+        categories,
+        maxRequirements,
+        maxPerSection,
+      });
+      return ok(result);
+    } catch (error) {
+      return fail(error);
+    }
+  },
 );
 
 server.registerTool(

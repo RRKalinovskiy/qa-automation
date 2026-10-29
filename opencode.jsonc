@@ -14,6 +14,7 @@
       "enabled": true,
       "environment": {
         "SABY_BASE_URL": "https://online.sbis.ru",
+        "SABY_PROJECT_BASE_URL": "https://project.sbis.ru",
         "SABY_STORAGE_STATE": ".auth/saby.json"
       }
     }

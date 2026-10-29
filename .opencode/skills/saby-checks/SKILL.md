@@ -150,6 +150,19 @@ MCP проверяет префикс, комментарий, описание 
 и обновлении теста. Получить правила программно:
 `saby_check_rules`.
 
+## Если проверка строится по проекту
+
+Сначала изучи проект навыком `saby-project-research`:
+
+```text
+saby_project_get → saby_project_map → saby_project_requirements
+→ saby_project_check_draft
+```
+
+Проект на `project.sbis.ru` — рабочий документ, его нельзя менять.
+Черновик проверки создаётся только в памяти; после согласования его
+передают в `saby_check_import_scenario` с `dryRun: true`.
+
 ## Алгоритм
 
 ### 1. Проверь доступ и карточку

@@ -22,6 +22,7 @@ mcp/saby-checks/
 ├── server.mjs      # регистрация MCP-инструментов
 ├── client.mjs      # Saby JSON-RPC, cookie, guid → id
 ├── checks.mjs      # доменные операции: check/stage/point/status
+├── project.mjs     # read-only project.sbis.ru, SabyDoc, требования
 ├── records.mjs     # record/recordset, транслитерация, длительности
 ├── statuses.mjs    # статусы и алиасы
 └── test/           # unit + smoke
@@ -73,6 +74,29 @@ POST {SABY_BASE_URL}/service/?x_version=26.5118-135
 | Статусы/проценты | `Проверка.СтатистикаПоПроверке` | ✅ |
 | Удалить пункт/этап | `ПунктПроверки.Remove` | ✅ |
 | Удалить документ | `Документ.УдалитьДокументы` | ✅ |
+
+## Проект project.sbis.ru
+
+Проект — рабочий документ. MCP работает с ним только на чтение.
+
+| Операция | Метод |
+|---|---|
+| Карточка проекта | `Проект.ПрочитатьДляУчастника` |
+| Документы проекта | `Проект.AttachList` |
+| Карточка этапа | `Этап.ПрочитатьДляУчастника` |
+| Текст SabyDoc | `SiteDocument.Read` |
+
+- `Проект.ПрочитатьДляУчастника` принимает `ИдО` — uuid или числовой id.
+- `Проект.AttachList` принимает `Фильтр` с `catalogId` = числовой id
+  проекта, `Сортировка: null`, `Навигация: null`, `ДопПоля: []`.
+- `SiteDocument.Read` принимает `fileId` = `redactionId` из
+  `Проект.AttachList`, не `attachId`.
+- `siteInfo.Pages[].Content` — frame SabyDoc; MCP преобразует его в
+  текст и оглавление.
+- Требования извлекаются эвристически: раздел TOC → `confidence:
+  heading`, абзац с «должен/необходимо» → `confidence: text`.
+
+Подробнее: `docs/api/sbis-checks.md`, раздел 14.
 
 ## Ключевые поля
 

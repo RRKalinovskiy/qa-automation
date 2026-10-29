@@ -97,10 +97,13 @@ npm run mcp:saby             # запустить MCP вручную (stdio)
 ## MCP проверок Saby
 
 - Сервер: `mcp/saby-checks/server.mjs`, инструменты `saby_check_*`.
+- Проект: read-only инструменты `saby_project_*` для project.sbis.ru.
+  Рабочий проект нельзя изменять; черновик проверки создаётся в памяти.
 - Конфигурация: `opencode.jsonc` → `mcp.saby-checks`.
 - Авторизация: `npm run saby:login` (storageState) или `SABY_COOKIE`.
 - Контракты: `docs/api/sbis-checks.md`.
-- Навыки: `saby-checks` (написание проверки), `saby-checks-api` (контракты и поддержка).
+- Навыки: `saby-checks` (написание проверки), `saby-project-research`
+  (изучение проекта), `saby-checks-api` (контракты и поддержка).
 
 ## Правила оформления тестов Saby
 
@@ -150,6 +153,7 @@ read-only план объединения идей в `ЧЛ`. Удаление �
 | `api-automation` | Написать или отревьюить API-автотесты. |
 | `ui-automation` | Написать или отревьюить UI-автотесты. |
 | `saby-crm-deals` | Работа с JSON-RPC API сделок Saby: CRUD, состав, этапы, удаление/восстановление, связи. |
+| `saby-project-research` | Изучение проекта project.sbis.ru: этапы, документы, SabyDoc, требования (Т), карта функционала и черновик проверки. Только чтение. |
 | `saby-checks` | Превратить сценарий в проверку Saby: этапы, пункты, статусы, импорт через MCP. |
 | `saby-checks-api` | Контракты JSON-RPC проверок Saby и поддержка MCP `saby-checks`. |
 | `saby-webclient-research` | Найти метод, снять контракт с UI, открыть карточку и вызвать React-обработчик. |

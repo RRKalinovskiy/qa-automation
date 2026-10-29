@@ -65,6 +65,9 @@ try {
   assert.ok(names.includes('saby_check_get'));
   assert.ok(names.includes('saby_check_import_scenario'));
   assert.ok(names.includes('saby_check_verify'));
+  assert.ok(names.includes('saby_project_get'));
+  assert.ok(names.includes('saby_project_map'));
+  assert.ok(names.includes('saby_project_check_draft'));
   console.log(`OK: MCP отвечает, инструментов ${names.length}`);
   console.log(names.join('\n'));
 } finally {

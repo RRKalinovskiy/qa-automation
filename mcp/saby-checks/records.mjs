@@ -101,6 +101,33 @@ export function decodeRecord(value) {
   return result;
 }
 
+/**
+ * Рекурсивно разбирает record/recordset, включая вложенные структуры.
+ * Нужен для карточек проекта, этапа и SabyDoc.
+ */
+export function decodeDeep(value) {
+  if (!value || typeof value !== 'object') return value;
+  if (value._type === 'record') {
+    const result = {};
+    (value.s ?? []).forEach((column, index) => {
+      result[column.n] = decodeDeep(value.d?.[index]);
+    });
+    return result;
+  }
+  if (value._type === 'recordset') {
+    const columns = (value.s ?? []).map((column) => column.n);
+    return (value.d ?? []).map((row) => {
+      const item = {};
+      columns.forEach((name, index) => {
+        item[name] = decodeDeep(row?.[index]);
+      });
+      return item;
+    });
+  }
+  if (Array.isArray(value)) return value.map(decodeDeep);
+  return value;
+}
+
 /** Разбирает recordset в массив объектов. */
 export function decodeRecordSet(value) {
   if (!value || value._type !== 'recordset') {
