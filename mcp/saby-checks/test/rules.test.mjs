@@ -4,6 +4,8 @@ import test from 'node:test';
 import {
   DEFAULT_POINT_TYPE,
   MAX_PLANNED_MINUTES,
+  TK_RECOMMENDED_MAX_STEPS,
+  TK_SPLIT_THRESHOLD_STEPS,
   formatAutomation,
   formatPrecondition,
   formatTestDescription,
@@ -11,6 +13,7 @@ import {
   normalizeTestName,
   renameWithType,
   resolvePointType,
+  tkStepWarnings,
   validatePointRules,
 } from '../rules.mjs';
 
@@ -92,19 +95,20 @@ test('validatePointRules требует комментарий и не боле�
   );
 });
 
-test('ТК требует automation, иначе это ручная проверка и нужен ЧЛ', () => {
-  assert.throws(
-    () =>
-      validatePointRules({
-        name: 'ТК: Неверный email',
-        type: 'ТК',
-        comment: 'Проверяем валидацию email',
-        plannedMinutes: 5,
-        enforceTypeRules: true,
-      }),
-    /automation/,
-  );
+test('ТК не требует ссылки на АТ, automation опционален', () => {
   const result = validatePointRules({
+    name: 'ТК: Неверный email',
+    type: 'ТК',
+    comment: 'Проверяем валидацию email',
+    plannedMinutes: 5,
+    steps: ['Ввести неверный email'],
+    enforceTypeRules: true,
+  });
+  assert.equal(result.type, 'ТК');
+  assert.equal(result.automation, null);
+  assert.equal(result.defaultMark.key, 'automated');
+
+  const withAutomation = validatePointRules({
     name: 'ТК: Неверный email',
     type: 'ТК',
     comment: 'Проверяем валидацию email',
@@ -112,9 +116,20 @@ test('ТК требует automation, иначе это ручная прове�
     automation: 'tests/api/client-validation.spec.ts',
     enforceTypeRules: true,
   });
-  assert.equal(result.type, 'ТК');
-  assert.equal(result.defaultMark.key, 'automated');
-  assert.match(result.automation, /client-validation/);
+  assert.match(withAutomation.automation, /client-validation/);
+});
+
+test('tkStepWarnings предупреждает о длинном ТК', () => {
+  assert.deepEqual(tkStepWarnings('ТК', TK_RECOMMENDED_MAX_STEPS), []);
+  assert.match(
+    tkStepWarnings('ТК', TK_RECOMMENDED_MAX_STEPS + 1)[0],
+    /больше рекомендуемых/,
+  );
+  assert.match(
+    tkStepWarnings('ТК', TK_SPLIT_THRESHOLD_STEPS + 1)[0],
+    /дробление/,
+  );
+  assert.deepEqual(tkStepWarnings('ЧЛ', 20), []);
 });
 
 test('ЧЛ требует минимум две идеи или шага', () => {
@@ -144,29 +159,14 @@ test('ЧЛ требует минимум две идеи или шага', () =>
   assert.equal(result.defaultMark.key, 'pc');
 });
 
-test('ручной ТК-исключение требует manual и минимум два шага', () => {
-  assert.throws(
-    () =>
-      validatePointRules({
-        name: 'ТК: Сложный сценарий',
-        type: 'ТК',
-        comment: 'Повторяем точный порядок шагов',
-        plannedMinutes: 5,
-        manual: true,
-        steps: ['Шаг 1'],
-        requireIdeas: true,
-        enforceTypeRules: true,
-      }),
-    /минимум 2/,
-  );
+test('manual помечает ТК как ручной', () => {
   const result = validatePointRules({
     name: 'ТК: Сложный сценарий',
     type: 'ТК',
     comment: 'Повторяем точный порядок шагов',
     plannedMinutes: 5,
     manual: true,
-    steps: ['Шаг 1', 'Шаг 2'],
-    requireIdeas: true,
+    steps: ['Шаг 1'],
     enforceTypeRules: true,
   });
   assert.equal(result.manual, true);

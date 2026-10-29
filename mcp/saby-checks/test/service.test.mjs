@@ -282,22 +282,20 @@ test('createPoint по умолчанию создаёт ЧЛ с двумя ид
   assert.equal(update['ЧеклистСтруктура.Версия'], '');
 });
 
-test('createPoint запрещает ТК без automation и ЧЛ с одной идеей', async () => {
+test('createPoint разрешает ТК без automation и запрещает ЧЛ с одной идеей', async () => {
   const client = new FakeClient();
   const service = new CheckService(client);
-  await assert.rejects(
-    () =>
-      service.createPoint({
-        checkId: 10,
-        parentSectionId: 200,
-        type: 'ТК',
-        name: 'ТК: Неверный email',
-        comment: 'Проверяем валидацию email',
-        steps: ['Ввести неверный email'],
-        plannedMinutes: 5,
-      }),
-    /automation/,
-  );
+  const point = await service.createPoint({
+    checkId: 10,
+    parentSectionId: 200,
+    type: 'ТК',
+    name: 'ТК: Неверный email',
+    comment: 'Проверяем валидацию email',
+    steps: ['Ввести неверный email'],
+    plannedMinutes: 5,
+  });
+  assert.equal(point.type, 'ТК');
+  assert.equal(point.automation, null);
   await assert.rejects(
     () =>
       service.createPoint({
@@ -311,6 +309,21 @@ test('createPoint запрещает ТК без automation и ЧЛ с одно�
       }),
     /минимум 2/,
   );
+});
+
+test('createPoint предупреждает о длинном ТК', async () => {
+  const client = new FakeClient();
+  const service = new CheckService(client);
+  const point = await service.createPoint({
+    checkId: 10,
+    parentSectionId: 200,
+    type: 'ТК',
+    name: 'ТК: Длинный сценарий',
+    comment: 'Проверяем длинный сценарий',
+    steps: Array.from({ length: 16 }, (_, index) => `Шаг ${index + 1}`),
+    plannedMinutes: 5,
+  });
+  assert.ok(point.warnings.some((warning) => /дробление/.test(warning)));
 });
 
 test('updatePoint с type ЧЛ переименовывает ошибочный ТК', async () => {

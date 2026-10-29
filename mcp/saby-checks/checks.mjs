@@ -19,6 +19,7 @@ import {
   normalizeTestName,
   renameWithType,
   resolvePointType,
+  tkStepWarnings,
   validatePointRules,
 } from './rules.mjs';
 import {
@@ -509,9 +510,10 @@ export class CheckService {
     }
     if (pointType === 'ТК' && manual) {
       warnings.push(
-        'ТК создан как ручное исключение (manual=true): это допустимо только для сложного сценария с точным порядком шагов.',
+        'ТК помечен как ручной (manual=true): пометка ПК вместо АТ.',
       );
     }
+    warnings.push(...tkStepWarnings(pointType, validation.ideasCount));
     const userId =
       check.employeeId ??
       (process.env.SABY_EMPLOYEE_ID ? Number(process.env.SABY_EMPLOYEE_ID) : null);
@@ -606,8 +608,9 @@ export class CheckService {
         : null;
     const nameForValidation =
       normalizedName ?? (fields.currentName ? String(fields.currentName).trim() : null);
+    let validation = null;
     if (!isStage) {
-      validatePointRules({
+      validation = validatePointRules({
         name: nameForValidation ?? `${DEFAULT_POINT_TYPE}: partial`,
         type: pointType,
         comment: comment ?? undefined,
@@ -632,7 +635,7 @@ export class CheckService {
       ? null
       : fields.mark != null
         ? normalizeMark(fields.mark)
-        : fields.type != null
+        : fields.type != null || fields.manual != null
           ? defaultMarkForType(pointType, { manual: Boolean(fields.manual) })
           : null;
     if (normalizedName != null) {
@@ -711,8 +714,11 @@ export class CheckService {
     }
     if (pointType === 'ТК' && fields.manual) {
       warnings.push(
-        'ТК помечен как ручное исключение: только для сложного сценария с точным порядком шагов.',
+        'ТК помечен как ручной: пометка ПК вместо АТ.',
       );
+    }
+    if (validation) {
+      warnings.push(...tkStepWarnings(pointType, validation.ideasCount));
     }
     return {
       ...point,
@@ -720,6 +726,7 @@ export class CheckService {
       mark: mark?.key ?? null,
       automation: fields.automation ?? null,
       manual: Boolean(fields.manual),
+      ideasCount: validation?.ideasCount ?? null,
       warnings,
       rules: {
         nameNormalized: normalizedName != null && normalizedName !== fields.name,
@@ -1159,9 +1166,10 @@ export class CheckService {
           }
           if (pointType === 'ТК' && manual) {
             warnings.push(
-              `"${pointName}" — ручное ТК-исключение: только для сложного сценария с точным порядком шагов.`,
+              `"${pointName}" — ручной ТК: пометка ПК вместо АТ.`,
             );
           }
+          warnings.push(...tkStepWarnings(pointType, validation.ideasCount));
           const existingPoint = byName(existingPoints, pointName);
           if (existingPoint) {
             if (onExisting === 'error') {

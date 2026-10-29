@@ -2,7 +2,7 @@
  * Правила оформления тестов Saby.
  *
  * 1. Название теста начинается с ТК / ЧЛ / Т.
- *    ТК — автотест, ЧЛ — набор идей одного ручного сценария.
+ *    ТК — тест-кейс, обычно автотест; ЧЛ — набор идей одного ручного сценария.
  * 2. Краткое описание — «Общее описание» → «Комментарий».
  * 3. Предварительные шаги — «Общее описание» → «Описание».
  * 4. В предварительных шагах — подготовка к тесту.
@@ -11,16 +11,18 @@
  * 7. Пометки: флаг — ПК; красный — важный МК; жёлтый — незначительный МК;
  *    зелёный — МК не критичный функционал; синий — АТ.
  * 8. Описание не должно совпадать с названием теста.
- * 9. ТК без automation запрещён: ручная идея оформляется как ЧЛ.
+ * 9. ТК — тест-кейс, обычно автотест; ссылка на автотест не обязательна.
+ *    Рекомендуется до 10 шагов; больше 15 — повод рассмотреть дробление.
  * 10. ЧЛ содержит минимум 2 идеи/шага в рамках одного сценария.
  */
 
 export const TEST_NAME_PREFIXES = ['ТК', 'ЧЛ', 'Т'];
 export const POINT_TYPES = ['ЧЛ', 'ТК', 'Т'];
 export const DEFAULT_POINT_TYPE = 'ЧЛ';
-export const AUTOMATION_REQUIRED_TYPES = ['ТК'];
 export const MAX_PLANNED_MINUTES = 5;
 export const MIN_CHECKLIST_IDEAS = 2;
+export const TK_RECOMMENDED_MAX_STEPS = 10;
+export const TK_SPLIT_THRESHOLD_STEPS = 15;
 
 export const MARK_RULES = {
   pc: {
@@ -128,6 +130,25 @@ export function countChecklistIdeas({ ideas, steps } = {}) {
     .map((line) => String(line).trim())
     .filter((line) => line && !/^(ШАГИ|ИДЕИ):/i.test(line))
     .length;
+}
+
+export function tkStepWarnings(type, stepsCount) {
+  if (type !== 'ТК' || !Number.isFinite(stepsCount) || stepsCount <= 0) {
+    return [];
+  }
+  if (stepsCount > TK_SPLIT_THRESHOLD_STEPS) {
+    return [
+      `В ТК ${stepsCount} шагов — больше ${TK_SPLIT_THRESHOLD_STEPS}. ` +
+        'Рассмотрите дробление теста на несколько ТК или перенос идей в ЧЛ.',
+    ];
+  }
+  if (stepsCount > TK_RECOMMENDED_MAX_STEPS) {
+    return [
+      `В ТК ${stepsCount} шагов — больше рекомендуемых ${TK_RECOMMENDED_MAX_STEPS}. ` +
+        'Проверьте, не стоит ли разделить сценарий.',
+    ];
+  }
+  return [];
 }
 
 export function normalizeMark(value) {
@@ -279,22 +300,6 @@ export function validatePointRules({
         : String(automation).trim();
   const ideasCount = countChecklistIdeas({ ideas, steps });
   if (enforceTypeRules) {
-    if (AUTOMATION_REQUIRED_TYPES.includes(pointType) && !automationText && !manual) {
-      throw new Error(
-        'ТК означает автотест. Укажите automation (файл, id или ссылку на автотест) ' +
-          'либо оформите ручную проверку как ЧЛ. Для сложного ручного сценария ' +
-          'с точным порядком шагов передайте manual=true и минимум 2 шага.',
-      );
-    }
-    if (
-      pointType === 'ТК' &&
-      manual &&
-      ideasCount < MIN_CHECKLIST_IDEAS
-    ) {
-      throw new Error(
-        `Ручной ТК-исключение требует минимум ${MIN_CHECKLIST_IDEAS} шага с точным порядком действий.`,
-      );
-    }
     if (
       pointType === 'ЧЛ' &&
       (requireIdeas || ideasCount > 0) &&
@@ -325,13 +330,15 @@ export function rulesSummary() {
     namePrefixes: TEST_NAME_PREFIXES,
     defaultType: DEFAULT_POINT_TYPE,
     minChecklistIdeas: MIN_CHECKLIST_IDEAS,
+    tkRecommendedMaxSteps: TK_RECOMMENDED_MAX_STEPS,
+    tkSplitThresholdSteps: TK_SPLIT_THRESHOLD_STEPS,
     maxPlannedMinutes: MAX_PLANNED_MINUTES,
     types: {
       ТК: {
-        meaning: 'Автотест: одна проверяемая идея, покрытая кодом.',
+        meaning: 'Тест-кейс: обычно автотест, но ссылка на автотест не обязательна.',
         requirement:
-          'Обязателен automation — файл, id или ссылка на автотест. ' +
-          'Исключение — сложный ручной сценарий с manual=true и минимум 2 шагами.',
+          `До ${TK_RECOMMENDED_MAX_STEPS} шагов рекомендуется; больше ${TK_SPLIT_THRESHOLD_STEPS} — ` +
+          'повод рассмотреть дробление. Ручной ТК помечается manual=true.',
         defaultMark: 'automated',
       },
       ЧЛ: {
@@ -356,10 +363,10 @@ export function rulesSummary() {
     },
     marks: Object.values(MARK_RULES),
     decisionTree: [
-      'Есть автотест или он планируется? → ТК с automation и пометкой АТ.',
+      'Нужен один тест-кейс, часто автотест? → ТК; automation указывается, если есть.',
       'Ручная проверка нескольких идей одного сценария → один ЧЛ с шагами.',
       'Ручная проверка одной идеи → шаг внутри существующего ЧЛ, а не новый ТК.',
-      'Сложный ручной сценарий с точным порядком шагов → ТК-исключение с manual=true и минимум 2 шагами.',
+      'В ТК больше 10 шагов → проверьте, не пора ли разделить; больше 15 → дробите.',
       'Новый ЧЛ создаётся только для нового сценария или блока, а не для каждой идеи.',
     ],
     mergeRules: [
@@ -370,9 +377,9 @@ export function rulesSummary() {
       'После слияния проверьте карточку в UI: название, шаги, статус и пометка.',
     ],
     rules: [
-      'Название теста начинается с ТК (автотест), ЧЛ (чек-лист) или Т (требование).',
-      'ТК без automation запрещён: это признак ручной проверки, для неё нужен ЧЛ.',
-      'Исключение — сложный ручной сценарий: ТК с manual=true и минимум 2 шагами.',
+      'Название теста начинается с ТК (тест-кейс), ЧЛ (чек-лист) или Т (требование).',
+      'ТК — тест-кейс, обычно автотест; ссылка на автотест не обязательна.',
+      'В ТК рекомендуется до 10 шагов; больше 15 — рассмотрите дробление теста.',
       'ЧЛ — набор идей одного сценария; минимум 2 шага/идеи.',
       'Короткое описание, что проверяем, — в «Общее описание» → «Комментарий».',
       'Предварительные шаги — в «Общее описание» → «Описание».',

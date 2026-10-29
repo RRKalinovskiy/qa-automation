@@ -222,7 +222,9 @@ try {
     }),
   );
   assert.equal(rules.defaultType, 'ЧЛ');
-  assert.match(rules.types.ТК.requirement, /automation/);
+  assert.match(rules.types.ТК.requirement, /дробление/);
+  assert.equal(rules.tkRecommendedMaxSteps, 10);
+  assert.equal(rules.tkSplitThresholdSteps, 15);
   assert.ok(rules.decisionTree.length >= 3);
   assert.ok(rules.mergeRules.some((rule) => /merge_plan/.test(rule)));
 

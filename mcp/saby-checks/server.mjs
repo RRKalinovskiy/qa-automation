@@ -291,7 +291,8 @@ server.registerTool(
       'Создаёт тест внутри этапа. Соблюдает правила: имя начинается с ТК/ЧЛ/Т, короткое описание — ' +
       'в «Комментарий», предварительные шаги — в «Описание» (ПРЕДУСЛОВИЕ), план не более 5 минут. ' +
       'По умолчанию создаётся ЧЛ: ручная проверка — это набор идей одного сценария. ' +
-      'ТК создаётся только для автотеста и требует automation. ' +
+      'ТК — тест-кейс, обычно автотест; automation не обязателен. ' +
+      'Рекомендуется до 10 шагов, больше 15 — повод рассмотреть дробление. ' +
       'parentSectionId — structureId этапа из saby_check_tree.',
     inputSchema: z.object({
       check: checkRef,
@@ -299,7 +300,7 @@ server.registerTool(
       type: z
         .enum(['ТК', 'ЧЛ', 'Т'])
         .default(DEFAULT_POINT_TYPE)
-        .describe('ЧЛ — ручной набор идей (по умолчанию), ТК — автотест, Т — требование'),
+        .describe('ЧЛ — ручной набор идей (по умолчанию), ТК — тест-кейс, Т — требование'),
       name: z.string().min(1).describe('Название теста; префикс ТК/ЧЛ/Т обязателен'),
       comment: z
         .string()
@@ -322,12 +323,12 @@ server.registerTool(
       automation: z
         .union([z.string(), z.array(z.string())])
         .optional()
-        .describe('Для ТК: файл, id или ссылка на автотест — обязателен'),
+        .describe('Для ТК: файл, id или ссылка на автотест — необязательно'),
       manual: z
         .boolean()
         .default(false)
         .describe(
-          'ТК-исключение: сложный ручной сценарий с точным порядком шагов; требует минимум 2 шага',
+          'Пометить ТК как ручной: пометка ПК вместо АТ',
         ),
       statusComment: z
         .string()
@@ -407,13 +408,13 @@ server.registerTool(
     description:
       'Частично обновляет тест: название, «Комментарий», «Описание» (ПРЕДУСЛОВИЕ/ШАГИ/РЕЗУЛЬТАТ), ' +
       'план (не более 5 минут), статус, ответственного. pointId — id документа из saby_check_tree. ' +
-      'Для смены типа укажите type: ТК требует automation, ЧЛ — минимум 2 идеи/шага.',
+      'Для смены типа укажите type: ТК — тест-кейс (automation не обязателен), ЧЛ — минимум 2 идеи/шага.',
     inputSchema: z.object({
       pointId: pointRef,
       type: z
         .enum(['ТК', 'ЧЛ', 'Т'])
         .optional()
-        .describe('Новый тип: ТК — автотест (нужен automation), ЧЛ — ручной набор идей'),
+        .describe('Новый тип: ТК — тест-кейс, ЧЛ — ручной набор идей'),
       name: z.string().min(1).optional(),
       comment: z.string().min(1).optional().describe('Короткое описание, что проверяем'),
       description: z.string().optional(),
@@ -427,11 +428,11 @@ server.registerTool(
       automation: z
         .union([z.string(), z.array(z.string())])
         .optional()
-        .describe('Для ТК: файл, id или ссылка на автотест — обязателен'),
+        .describe('Для ТК: файл, id или ссылка на автотест — необязательно'),
       manual: z
         .boolean()
         .optional()
-        .describe('ТК-исключение: сложный ручной сценарий; требует минимум 2 шага'),
+        .describe('Пометить ТК как ручной: пометка ПК вместо АТ'),
       statusComment: z.string().optional(),
       plannedMinutes: z.number().int().min(0).max(MAX_PLANNED_MINUTES).optional(),
       status: statusValue.optional(),
@@ -626,7 +627,7 @@ server.registerTool(
     description:
       'Создаёт этапы и тесты из структурированного сценария по правилам: имена ТК/ЧЛ/Т, «Комментарий», ' +
       '«Описание» с ПРЕДУСЛОВИЕМ, план не более 5 минут, пометки ПК/МК/АТ. ' +
-      'По умолчанию пункт — ЧЛ с минимум двумя шагами; ТК требует automation. ' +
+      'По умолчанию пункт — ЧЛ с минимум двумя шагами; ТК — тест-кейс, automation не обязателен. ' +
       'Сначала вызывайте с dryRun=true. Существующие этапы/тесты переиспользуются.',
     inputSchema: z.object({
       check: checkRef,
@@ -643,7 +644,7 @@ server.registerTool(
                   type: z
                     .enum(['ТК', 'ЧЛ', 'Т'])
                     .default(DEFAULT_POINT_TYPE)
-                    .describe('ЧЛ — ручной набор идей (по умолчанию), ТК — автотест'),
+                    .describe('ЧЛ — ручной набор идей (по умолчанию), ТК — тест-кейс'),
                   name: z.string().min(1),
                   comment: z.string().min(1),
                   description: z.string().optional(),
@@ -659,12 +660,12 @@ server.registerTool(
                   automation: z
                     .union([z.string(), z.array(z.string())])
                     .optional()
-                    .describe('Для ТК: файл, id или ссылка на автотест — обязателен'),
+                    .describe('Для ТК: файл, id или ссылка на автотест — необязательно'),
                   manual: z
                     .boolean()
                     .default(false)
                     .describe(
-                      'ТК-исключение: сложный ручной сценарий; требует минимум 2 шага',
+                      'Пометить ТК как ручной: пометка ПК вместо АТ',
                     ),
                   statusComment: z.string().optional(),
                   plannedMinutes: z
