@@ -195,7 +195,8 @@ export class CheckService {
       checkId: record['ЧеклистСтруктура.БазовыйРаздел'] ?? null,
       name: record['ЧеклистСтруктура.Название'] ?? null,
       comment: record['ЧеклистСтруктура.Комментарий'] ?? null,
-      description: record['ЧеклистСтруктура.Версия'] ?? null,
+      description: record['ЧеклистСтруктура.Описание'] ?? null,
+      statusComment: record['ЧеклистСтруктура.Версия'] ?? null,
       statusId: record['ЧеклистСтруктура.ОбъектПланирования'] ?? null,
       statusName: statusName(record['ЧеклистСтруктура.ОбъектПланирования']),
       plannedTime,
@@ -460,6 +461,7 @@ export class CheckService {
       name,
       comment,
       description,
+      statusComment: options.statusComment ?? '',
       plannedMinutes: planned.plannedMinutes,
       status: options.status,
       assigneeId: options.assigneeId,
@@ -534,9 +536,22 @@ export class CheckService {
     }
     if (description != null) {
       recordFields.push({
-        name: 'ЧеклистСтруктура.Версия',
+        name: 'ЧеклистСтруктура.Описание',
         type: 'Строка',
         value: description,
+      });
+    }
+    const statusComment =
+      fields.statusComment != null
+        ? String(fields.statusComment)
+        : description != null
+          ? ''
+          : null;
+    if (statusComment != null) {
+      recordFields.push({
+        name: 'ЧеклистСтруктура.Версия',
+        type: 'Строка',
+        value: statusComment,
       });
     }
     if (planned != null) {
@@ -746,6 +761,7 @@ export class CheckService {
           const comment = point.comment ?? null;
           const description = formatTestDescription(point);
           const planned = clampPlannedMinutes(point.plannedMinutes);
+          const statusComment = point.statusComment ?? null;
           validatePointRules({
             name: pointName,
             comment,
@@ -783,6 +799,7 @@ export class CheckService {
                 name: pointName,
                 comment,
                 description,
+                statusComment,
                 plannedMinutes: planned.plannedMinutes,
                 status: point.status,
                 assigneeId: point.assigneeId,
@@ -820,6 +837,7 @@ export class CheckService {
             name: pointName,
             comment,
             description,
+            statusComment,
             plannedMinutes: planned.plannedMinutes,
             status: point.status,
             assigneeId: point.assigneeId,

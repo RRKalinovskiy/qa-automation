@@ -309,6 +309,10 @@ server.registerTool(
         .optional()
         .describe('Шаги теста'),
       expected: z.string().optional().describe('Ожидаемый результат'),
+      statusComment: z
+        .string()
+        .optional()
+        .describe('Комментарий статуса («Текущее состояние»); обычно пустой'),
       plannedMinutes: z
         .number()
         .int()
@@ -339,6 +343,7 @@ server.registerTool(
           precondition: input.precondition ?? null,
           steps: input.steps ?? null,
           expected: input.expected ?? null,
+          statusComment: input.statusComment ?? null,
           plannedMinutes: input.plannedMinutes,
           status: input.status ?? 'Не тестировался',
           assigneeId: input.assigneeId ?? null,
@@ -355,6 +360,7 @@ server.registerTool(
         precondition: input.precondition,
         steps: input.steps,
         expected: input.expected,
+        statusComment: input.statusComment,
         plannedMinutes: input.plannedMinutes,
         status: input.status,
         assigneeId: input.assigneeId,
@@ -383,6 +389,7 @@ server.registerTool(
       precondition: z.union([z.string(), z.array(z.string())]).optional(),
       steps: z.union([z.string(), z.array(z.string())]).optional(),
       expected: z.string().optional(),
+      statusComment: z.string().optional(),
       plannedMinutes: z.number().int().min(0).max(MAX_PLANNED_MINUTES).optional(),
       status: statusValue.optional(),
       assigneeId: z.number().int().positive().optional(),
@@ -538,6 +545,7 @@ server.registerTool(
                   precondition: z.union([z.string(), z.array(z.string())]).optional(),
                   steps: z.union([z.string(), z.array(z.string())]).optional(),
                   expected: z.string().optional(),
+                  statusComment: z.string().optional(),
                   plannedMinutes: z
                     .number()
                     .int()

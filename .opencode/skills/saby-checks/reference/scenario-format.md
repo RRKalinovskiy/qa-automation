@@ -22,6 +22,7 @@ type Point = {
   steps?: string | string[];    // «ШАГИ: 1. ...»
   expected?: string;            // «ОЖИДАЕМЫЙ РЕЗУЛЬТАТ: ...»
   description?: string;         // готовое описание, если уже собрано
+  statusComment?: string;       // только комментарий статуса, обычно пустой
   plannedMinutes?: number;      // не более 5
   status?: string | number;     // по умолчанию «Не тестировался»
   assigneeId?: number;          // id сотрудника
