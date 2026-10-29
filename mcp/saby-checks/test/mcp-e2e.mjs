@@ -196,14 +196,37 @@ try {
         check: '10',
         parentSectionId: 100,
         dryRun: true,
-        sections: [{ name: 'Этап 1', points: [{ name: 'ТК: Новый пункт', comment: 'Проверяем новый пункт', plannedMinutes: 5 }] }],
+        sections: [
+          {
+            name: 'Этап 1',
+            points: [
+              {
+                name: 'Валидация контактных данных',
+                comment: 'Проверяем телефон и email',
+                steps: ['Телефон: неверный формат', 'Email: неверный формат'],
+                plannedMinutes: 5,
+              },
+            ],
+          },
+        ],
       },
     }),
   );
   assert.equal(plan.dryRun, true);
   assert.ok(plan.plan.some((item) => item.action === 'createPoint'));
 
-  console.log('OK: MCP e2e на моке — get/tree/import dryRun работают');
+  const rules = parseTool(
+    await request(5, 'tools/call', {
+      name: 'saby_check_rules',
+      arguments: {},
+    }),
+  );
+  assert.equal(rules.defaultType, 'ЧЛ');
+  assert.match(rules.types.ТК.requirement, /automation/);
+  assert.ok(rules.decisionTree.length >= 3);
+  assert.ok(rules.mergeRules.some((rule) => /merge_plan/.test(rule)));
+
+  console.log('OK: MCP e2e на моке — get/tree/import dryRun/rules работают');
 } finally {
   child.kill();
   await new Promise((resolve) => mock.close(resolve));

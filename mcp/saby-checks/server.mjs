@@ -18,9 +18,9 @@ import { CheckService, DEFAULT_TEMPLATE_ID } from './checks.mjs';
 import { SabyClient, SabyError } from './client.mjs';
 import { DEFAULT_STATUSES } from './statuses.mjs';
 import {
-  MARK_RULES,
+  DEFAULT_POINT_TYPE,
   MAX_PLANNED_MINUTES,
-  TEST_NAME_PREFIXES,
+  MIN_CHECKLIST_IDEAS,
   rulesSummary,
 } from './rules.mjs';
 
@@ -188,8 +188,9 @@ server.registerTool(
   {
     title: 'Правила оформления тестов',
     description:
-      'Возвращает правила оформления тестов Saby: префиксы ТК/ЧЛ/Т, поля «Комментарий» и «Описание», ' +
-      'формат ПРЕДУСЛОВИЯ, лимит 5 минут и mapping пометок (ПК/МК/АТ).',
+      'Возвращает правила оформления тестов Saby: семантику ТК (автотест) и ЧЛ (набор идей одного ' +
+      'сценария), поля «Комментарий» и «Описание», формат ПРЕДУСЛОВИЯ, лимит 5 минут, mapping пометок ' +
+      '(ПК/МК/АТ), дерево выбора ТК/ЧЛ и правила слияния дублей.',
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true },
   },
@@ -289,11 +290,16 @@ server.registerTool(
     description:
       'Создаёт тест внутри этапа. Соблюдает правила: имя начинается с ТК/ЧЛ/Т, короткое описание — ' +
       'в «Комментарий», предварительные шаги — в «Описание» (ПРЕДУСЛОВИЕ), план не более 5 минут. ' +
+      'По умолчанию создаётся ЧЛ: ручная проверка — это набор идей одного сценария. ' +
+      'ТК создаётся только для автотеста и требует automation. ' +
       'parentSectionId — structureId этапа из saby_check_tree.',
     inputSchema: z.object({
       check: checkRef,
       parentSectionId: z.number().int().positive(),
-      type: z.enum(['ТК', 'ЧЛ', 'Т']).default('ТК'),
+      type: z
+        .enum(['ТК', 'ЧЛ', 'Т'])
+        .default(DEFAULT_POINT_TYPE)
+        .describe('ЧЛ — ручной набор идей (по умолчанию), ТК — автотест, Т — требование'),
       name: z.string().min(1).describe('Название теста; префикс ТК/ЧЛ/Т обязателен'),
       comment: z
         .string()
@@ -307,8 +313,22 @@ server.registerTool(
       steps: z
         .union([z.string(), z.array(z.string())])
         .optional()
-        .describe('Шаги теста'),
+        .describe('Шаги/идеи; для ЧЛ нужно минимум 2'),
+      ideas: z
+        .union([z.array(z.string()), z.number().int().min(0)])
+        .optional()
+        .describe('Идеи ЧЛ, если они не совпадают с шагами; минимум 2'),
       expected: z.string().optional().describe('Ожидаемый результат'),
+      automation: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .describe('Для ТК: файл, id или ссылка на автотест — обязателен'),
+      manual: z
+        .boolean()
+        .default(false)
+        .describe(
+          'ТК-исключение: сложный ручной сценарий с точным порядком шагов; требует минимум 2 шага',
+        ),
       statusComment: z
         .string()
         .optional()
@@ -337,12 +357,16 @@ server.registerTool(
           action: 'createPoint',
           check: compactCheck(checkInfo),
           parentSectionId: input.parentSectionId,
+          type: input.type,
           name: input.name,
           comment: input.comment,
           description: input.description ?? null,
           precondition: input.precondition ?? null,
           steps: input.steps ?? null,
+          ideas: input.ideas ?? null,
           expected: input.expected ?? null,
+          automation: input.automation ?? null,
+          manual: input.manual,
           statusComment: input.statusComment ?? null,
           plannedMinutes: input.plannedMinutes,
           status: input.status ?? 'Не тестировался',
@@ -359,7 +383,10 @@ server.registerTool(
         description: input.description,
         precondition: input.precondition,
         steps: input.steps,
+        ideas: input.ideas,
         expected: input.expected,
+        automation: input.automation,
+        manual: input.manual,
         statusComment: input.statusComment,
         plannedMinutes: input.plannedMinutes,
         status: input.status,
@@ -379,16 +406,32 @@ server.registerTool(
     title: 'Изменить пункт проверки',
     description:
       'Частично обновляет тест: название, «Комментарий», «Описание» (ПРЕДУСЛОВИЕ/ШАГИ/РЕЗУЛЬТАТ), ' +
-      'план (не более 5 минут), статус, ответственного. pointId — id документа из saby_check_tree.',
+      'план (не более 5 минут), статус, ответственного. pointId — id документа из saby_check_tree. ' +
+      'Для смены типа укажите type: ТК требует automation, ЧЛ — минимум 2 идеи/шага.',
     inputSchema: z.object({
       pointId: pointRef,
-      type: z.enum(['ТК', 'ЧЛ', 'Т']).default('ТК'),
+      type: z
+        .enum(['ТК', 'ЧЛ', 'Т'])
+        .optional()
+        .describe('Новый тип: ТК — автотест (нужен automation), ЧЛ — ручной набор идей'),
       name: z.string().min(1).optional(),
       comment: z.string().min(1).optional().describe('Короткое описание, что проверяем'),
       description: z.string().optional(),
       precondition: z.union([z.string(), z.array(z.string())]).optional(),
       steps: z.union([z.string(), z.array(z.string())]).optional(),
+      ideas: z
+        .union([z.array(z.string()), z.number().int().min(0)])
+        .optional()
+        .describe('Идеи ЧЛ, если они не совпадают с шагами; минимум 2'),
       expected: z.string().optional(),
+      automation: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .describe('Для ТК: файл, id или ссылка на автотест — обязателен'),
+      manual: z
+        .boolean()
+        .optional()
+        .describe('ТК-исключение: сложный ручной сценарий; требует минимум 2 шага'),
       statusComment: z.string().optional(),
       plannedMinutes: z.number().int().min(0).max(MAX_PLANNED_MINUTES).optional(),
       status: statusValue.optional(),
@@ -518,6 +561,64 @@ server.registerTool(
   },
 );
 
+// План слияния — только чтение
+server.registerTool(
+  'saby_check_merge_plan',
+  {
+    title: 'План слияния идей в ЧЛ',
+    description:
+      'Read-only план объединения ТК/идей в ЧЛ. Ничего не создаёт и не удаляет. ' +
+      'Принимает явные группы (pointIds → targetId/targetName) или ищет кандидатов по похожим ' +
+      `названиям. Для плана нужны минимум ${MIN_CHECKLIST_IDEAS} идеи в ЧЛ. ` +
+      'Перед удалением исходных ТК подтвердите план.',
+    inputSchema: z.object({
+      check: checkRef,
+      parentSectionId: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe('structureId этапа; без него проверяются все корневые этапы'),
+      groups: z
+        .array(
+          z.object({
+            targetId: pointRef.optional().describe('id существующего ЧЛ'),
+            targetName: z
+              .string()
+              .min(1)
+              .optional()
+              .describe('Название нового ЧЛ, если targetId не задан'),
+            type: z.enum(['ТК', 'ЧЛ', 'Т']).default(DEFAULT_POINT_TYPE),
+            comment: z.string().optional().describe('Комментарий нового ЧЛ'),
+            pointIds: z.array(pointRef).min(1).describe('id исходных ТК/пунктов'),
+          }),
+        )
+        .default([]),
+      threshold: z
+        .number()
+        .min(0)
+        .max(1)
+        .default(0.45)
+        .describe('Порог похожести названий для кандидатов'),
+    }),
+    annotations: { readOnlyHint: true },
+  },
+  async ({ check, parentSectionId, groups, threshold }) => {
+    try {
+      const checkInfo = await getService().resolveCheck(check);
+      const plan = await getService().planMerge({
+        checkId: checkInfo.id,
+        parentSectionId,
+        groups,
+        threshold,
+      });
+      return ok({ ...plan, check: compactCheck(plan.check) });
+    } catch (error) {
+      return fail(error);
+    }
+  },
+);
+
 server.registerTool(
   'saby_check_import_scenario',
   {
@@ -525,6 +626,7 @@ server.registerTool(
     description:
       'Создаёт этапы и тесты из структурированного сценария по правилам: имена ТК/ЧЛ/Т, «Комментарий», ' +
       '«Описание» с ПРЕДУСЛОВИЕМ, план не более 5 минут, пометки ПК/МК/АТ. ' +
+      'По умолчанию пункт — ЧЛ с минимум двумя шагами; ТК требует automation. ' +
       'Сначала вызывайте с dryRun=true. Существующие этапы/тесты переиспользуются.',
     inputSchema: z.object({
       check: checkRef,
@@ -538,13 +640,32 @@ server.registerTool(
             points: z
               .array(
                 z.object({
-                  type: z.enum(['ТК', 'ЧЛ', 'Т']).default('ТК'),
+                  type: z
+                    .enum(['ТК', 'ЧЛ', 'Т'])
+                    .default(DEFAULT_POINT_TYPE)
+                    .describe('ЧЛ — ручной набор идей (по умолчанию), ТК — автотест'),
                   name: z.string().min(1),
                   comment: z.string().min(1),
                   description: z.string().optional(),
                   precondition: z.union([z.string(), z.array(z.string())]).optional(),
-                  steps: z.union([z.string(), z.array(z.string())]).optional(),
+                  steps: z
+                    .union([z.string(), z.array(z.string())])
+                    .optional()
+                    .describe('Шаги/идеи; для ЧЛ нужно минимум 2'),
+                  ideas: z
+                    .union([z.array(z.string()), z.number().int().min(0)])
+                    .optional(),
                   expected: z.string().optional(),
+                  automation: z
+                    .union([z.string(), z.array(z.string())])
+                    .optional()
+                    .describe('Для ТК: файл, id или ссылка на автотест — обязателен'),
+                  manual: z
+                    .boolean()
+                    .default(false)
+                    .describe(
+                      'ТК-исключение: сложный ручной сценарий; требует минимум 2 шага',
+                    ),
                   statusComment: z.string().optional(),
                   plannedMinutes: z
                     .number()

@@ -9,10 +9,16 @@ import {
   minutesToDuration,
 } from './records.mjs';
 import {
+  DEFAULT_POINT_TYPE,
+  MIN_CHECKLIST_IDEAS,
   clampPlannedMinutes,
+  defaultMarkForType,
   formatTestDescription,
+  hasTestPrefix,
   normalizeMark,
   normalizeTestName,
+  renameWithType,
+  resolvePointType,
   validatePointRules,
 } from './rules.mjs';
 import {
@@ -108,6 +114,56 @@ function parseNameFromInfoJson(value) {
     // ignore: поле может быть не JSON
   }
   return null;
+}
+
+const IDEA_STOP_WORDS = new Set([
+  'проверка',
+  'проверяем',
+  'проверить',
+  'карточка',
+  'карточки',
+  'карточке',
+  'клиент',
+  'клиента',
+  'клиенту',
+  'клиенты',
+  'фл',
+  'поле',
+  'поля',
+  'полей',
+  'блок',
+  'блока',
+  'данные',
+  'данных',
+  'значение',
+  'значения',
+  'ввод',
+  'ввода',
+  'форма',
+  'формы',
+]);
+
+export function ideaTokens(name) {
+  const text = String(name ?? '')
+    .replace(/^(ТК|ЧЛ|Т)\s*[:.\-–—]?\s*/u, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+  const tokens = text
+    .split(/\s+/)
+    .filter((token) => token.length >= 3 && !IDEA_STOP_WORDS.has(token));
+  return [...new Set(tokens)];
+}
+
+export function ideaSimilarity(left, right) {
+  const a = new Set(ideaTokens(left));
+  const b = new Set(ideaTokens(right));
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const token of a) {
+    if (b.has(token)) intersection += 1;
+  }
+  return intersection / (a.size + b.size - intersection);
 }
 
 function extractId(result, method) {
@@ -416,17 +472,46 @@ export class CheckService {
         'Не указан parentSectionId — структура этапа/раздела, внутри которого создаётся пункт',
       );
     }
-    const name = normalizeTestName(options.name, options.type || 'ТК');
+    const pointType = resolvePointType(options.name, options.type);
+    const manual = Boolean(options.manual);
+    const name = normalizeTestName(options.name, pointType);
     const comment = options.comment ?? null;
     const description = formatTestDescription(options);
     const planned = clampPlannedMinutes(options.plannedMinutes);
-    validatePointRules({
+    const validation = validatePointRules({
       name,
+      type: pointType,
       comment,
       description,
       plannedMinutes: planned.plannedMinutes,
+      automation: options.automation,
+      ideas: options.ideas,
+      steps: options.steps,
+      manual,
+      requireIdeas: true,
+      enforceTypeRules: true,
     });
-    const mark = normalizeMark(options.mark);
+    const mark =
+      options.mark != null
+        ? normalizeMark(options.mark)
+        : defaultMarkForType(pointType, { manual });
+    const warnings = [];
+    if (mark) {
+      warnings.push(
+        `Пометка "${mark.label}" зафиксирована в правилах, но не записана в Saby: ` +
+          'примените её в UI или полной записью документа.',
+      );
+    }
+    if (pointType === 'ЧЛ') {
+      warnings.push(
+        `ЧЛ содержит ${validation.ideasCount} идеи/шага. Проверяйте, что все они относятся к одному сценарию.`,
+      );
+    }
+    if (pointType === 'ТК' && manual) {
+      warnings.push(
+        'ТК создан как ручное исключение (manual=true): это допустимо только для сложного сценария с точным порядком шагов.',
+      );
+    }
     const userId =
       check.employeeId ??
       (process.env.SABY_EMPLOYEE_ID ? Number(process.env.SABY_EMPLOYEE_ID) : null);
@@ -469,13 +554,12 @@ export class CheckService {
     const point = await this.readPoint(pointId);
     return {
       ...point,
+      type: pointType,
       mark: mark?.key ?? null,
-      warnings: mark
-        ? [
-            `Пометка "${mark.label}" зафиксирована в правилах, но не записана в Saby: ` +
-              'примените её в UI или полной записью документа.',
-          ]
-        : [],
+      automation: validation.automation,
+      manual,
+      ideasCount: validation.ideasCount,
+      warnings,
       rules: {
         nameNormalized: name !== String(options.name ?? '').trim(),
         plannedMinutesClamped: planned.clamped,
@@ -488,18 +572,30 @@ export class CheckService {
     const recordFields = [
       { name: '@Документ', type: 'Число целое', value: Number(pointId) },
     ];
+    const currentPoint =
+      !isStage && fields.name == null && fields.type != null
+        ? await this.readPoint(pointId)
+        : null;
+    const pointType = isStage
+      ? null
+      : resolvePointType(fields.name ?? currentPoint?.name, fields.type);
     const normalizedName =
       fields.name != null
         ? isStage
           ? String(fields.name).trim()
-          : normalizeTestName(fields.name, fields.type || 'ТК')
-        : null;
+          : fields.type != null
+            ? renameWithType(fields.name, fields.type)
+            : normalizeTestName(fields.name, pointType)
+        : currentPoint?.name && fields.type != null
+          ? renameWithType(currentPoint.name, fields.type)
+          : null;
     const comment = fields.comment != null ? String(fields.comment).trim() : null;
     const description =
       fields.description != null ||
       fields.precondition != null ||
       fields.steps != null ||
-      fields.expected != null
+      fields.expected != null ||
+      fields.automation != null
         ? formatTestDescription(fields)
         : null;
     const planned =
@@ -512,14 +608,33 @@ export class CheckService {
       normalizedName ?? (fields.currentName ? String(fields.currentName).trim() : null);
     if (!isStage) {
       validatePointRules({
-        name: nameForValidation ?? 'ТК: partial',
+        name: nameForValidation ?? `${DEFAULT_POINT_TYPE}: partial`,
+        type: pointType,
         comment: comment ?? undefined,
         description: description ?? undefined,
         plannedMinutes: planned?.plannedMinutes ?? 0,
+        automation: fields.automation,
+        ideas: fields.ideas,
+        steps: fields.steps,
+        manual: Boolean(fields.manual),
         requireComment: false,
+        requireIdeas: Boolean(fields.ideas || fields.steps),
+        enforceTypeRules: Boolean(
+          fields.type ||
+            fields.automation ||
+            fields.ideas ||
+            fields.steps ||
+            fields.manual,
+        ),
       });
     }
-    const mark = isStage ? null : normalizeMark(fields.mark);
+    const mark = isStage
+      ? null
+      : fields.mark != null
+        ? normalizeMark(fields.mark)
+        : fields.type != null
+          ? defaultMarkForType(pointType, { manual: Boolean(fields.manual) })
+          : null;
     if (normalizedName != null) {
       recordFields.push({
         name: 'ЧеклистСтруктура.Название',
@@ -582,15 +697,30 @@ export class CheckService {
       Запись: encodeRecord(recordFields),
     });
     const point = await this.readPoint(pointId);
+    const warnings = [];
+    if (mark) {
+      warnings.push(
+        `Пометка "${mark.label}" зафиксирована в правилах, но не записана в Saby: ` +
+          'примените её в UI или полной записью документа.',
+      );
+    }
+    if (pointType === 'ЧЛ' && fields.steps) {
+      warnings.push(
+        'ЧЛ — набор идей одного сценария. Проверьте, что все шаги относятся к нему.',
+      );
+    }
+    if (pointType === 'ТК' && fields.manual) {
+      warnings.push(
+        'ТК помечен как ручное исключение: только для сложного сценария с точным порядком шагов.',
+      );
+    }
     return {
       ...point,
+      type: pointType,
       mark: mark?.key ?? null,
-      warnings: mark
-        ? [
-            `Пометка "${mark.label}" зафиксирована в правилах, но не записана в Saby: ` +
-              'примените её в UI или полной записью документа.',
-          ]
-        : [],
+      automation: fields.automation ?? null,
+      manual: Boolean(fields.manual),
+      warnings,
       rules: {
         nameNormalized: normalizedName != null && normalizedName !== fields.name,
         plannedMinutesClamped: planned?.clamped ?? false,
@@ -653,6 +783,234 @@ export class CheckService {
     }
     result.push(Number(structureId));
     return result;
+  }
+
+  async findNodeByStructureId(checkId, structureId) {
+    const queue = [...(await this.listChildren(checkId, null))];
+    while (queue.length > 0) {
+      const node = queue.shift();
+      if (node.structureId == null) continue;
+      if (Number(node.structureId) === Number(structureId)) return node;
+      if (node.hasChildren && node.count > 0) {
+        queue.push(...(await this.listChildren(checkId, node.structureId)));
+      }
+    }
+    return null;
+  }
+
+  /** Возвращает все листовые пункты под этапом/разделом. */
+  async collectLeafPoints(checkId, parentStructureId) {
+    const children = await this.listChildren(checkId, parentStructureId);
+    const points = [];
+    for (const child of children) {
+      if (child.deleted || child.structureId == null) continue;
+      if (child.hasChildren && child.count > 0) {
+        points.push(...(await this.collectLeafPoints(checkId, child.structureId)));
+      } else if (child.docId != null) {
+        const point = await this.readPoint(child.docId);
+        if (!hasTestPrefix(point.name)) continue;
+        points.push({
+          ...point,
+          stageStructureId: parentStructureId,
+        });
+      }
+    }
+    return points;
+  }
+
+  async collectMergeScopes(checkId, parentSectionId = null) {
+    if (parentSectionId != null) {
+      const node = await this.findNodeByStructureId(checkId, parentSectionId);
+      const points = await this.collectLeafPoints(checkId, parentSectionId);
+      return [
+        {
+          stageStructureId: Number(parentSectionId),
+          stageName: node?.name ?? null,
+          points: points.map((point) => ({
+            ...point,
+            stageName: node?.name ?? null,
+          })),
+        },
+      ];
+    }
+    const roots = await this.listChildren(checkId, null);
+    const scopes = [];
+    for (const root of roots) {
+      if (root.deleted || root.structureId == null) continue;
+      const points = await this.collectLeafPoints(checkId, root.structureId);
+      scopes.push({
+        stageStructureId: Number(root.structureId),
+        stageName: root.name,
+        points: points.map((point) => ({ ...point, stageName: root.name })),
+      });
+    }
+    return scopes;
+  }
+
+  /**
+   * Read-only план слияния ТК/идей в ЧЛ.
+   *
+   * groups: [{ targetId?, targetName?, type?, comment?, pointIds: [] }]
+   * Без groups возвращает только кандидатов на объединение по похожим названиям.
+   */
+  async planMerge({
+    checkId,
+    parentSectionId = null,
+    groups = [],
+    threshold = 0.45,
+  }) {
+    const check = await this.readCheck(checkId);
+    const scopes = await this.collectMergeScopes(check.id, parentSectionId);
+    const allPoints = scopes.flatMap((scope) => scope.points);
+    const byId = new Map(allPoints.map((point) => [Number(point.id), point]));
+    const notes = [
+      'План read-only: ничего не создаёт, не переименовывает и не удаляет.',
+      'Идея для шага берётся из «Комментарий», если он пуст — из названия.',
+      'TestCase-шаги, предусловия и пометки переносятся отдельно; проверьте их в UI.',
+    ];
+    const plans = [];
+
+    for (const group of groups) {
+      const sourceIds = (group.pointIds ?? []).map(Number);
+      if (sourceIds.length === 0) {
+        throw new SabyError('В группе слияния нет pointIds');
+      }
+      const sources = sourceIds.map((id) => byId.get(id)).filter(Boolean);
+      if (sources.length !== sourceIds.length) {
+        const missing = sourceIds.filter((id) => !byId.has(id));
+        throw new SabyError(
+          `Пункты ${missing.join(', ')} не найдены под выбранным этапом`,
+        );
+      }
+      const targetId = group.targetId != null ? Number(group.targetId) : null;
+      const target = targetId ? byId.get(targetId) ?? (await this.readPoint(targetId)) : null;
+      if (!target && !group.targetName) {
+        throw new SabyError(
+          'Укажите targetId существующего ЧЛ или targetName нового ЧЛ',
+        );
+      }
+      const stageStructureId =
+        target?.parentStructureId ?? sources[0].parentStructureId ?? null;
+      const stage = scopes.find(
+        (scope) => Number(scope.stageStructureId) === Number(stageStructureId),
+      );
+      const type = group.type ?? (target ? resolvePointType(target.name) : DEFAULT_POINT_TYPE);
+      const targetName = target
+        ? target.name
+        : normalizeTestName(group.targetName, type);
+      const warnings = [];
+      if (target && type !== 'ЧЛ') {
+        warnings.push(
+          `Цель "${target.name}" имеет тип ${type}. Для объединения идей нужен ЧЛ: ` +
+            'переименуйте пункт или создайте новый ЧЛ.',
+        );
+      }
+      const ideaSources = sources.filter(
+        (source) => !target || Number(source.id) !== Number(target.id),
+      );
+      const steps = ideaSources.map((source) => ({
+        sourceId: source.id,
+        sourceName: source.name,
+        idea: source.comment?.trim() || source.name,
+      }));
+      if (target && steps.length === 0) {
+        warnings.push('Все источники совпадают с целевым пунктом — добавлять нечего.');
+      }
+      if (!target && steps.length < MIN_CHECKLIST_IDEAS) {
+        warnings.push(
+          `В новом ЧЛ будет ${steps.length} идея/шаг(а). Для ЧЛ нужно минимум ${MIN_CHECKLIST_IDEAS}.`,
+        );
+      }
+      const actions = [];
+      if (target) {
+        actions.push({
+          action: 'reuseChecklist',
+          pointId: target.id,
+          name: target.name,
+        });
+      } else {
+        actions.push({
+          action: 'createChecklist',
+          name: targetName,
+          type,
+          comment: group.comment ?? null,
+          stageStructureId,
+          stageName: stage?.stageName ?? null,
+        });
+      }
+      for (const step of steps) {
+        actions.push({
+          action: 'addStep',
+          sourceId: step.sourceId,
+          idea: step.idea,
+        });
+      }
+      for (const source of ideaSources) {
+        actions.push({
+          action: 'deleteSource',
+          pointId: source.id,
+          name: source.name,
+          requiresConfirm: true,
+        });
+      }
+      plans.push({
+        action: 'mergeIntoChecklist',
+        stage: {
+          structureId: stageStructureId,
+          name: stage?.stageName ?? null,
+        },
+        target: target
+          ? { id: target.id, name: target.name, type }
+          : { id: null, name: targetName, type, new: true },
+        sources: sources.map((source) => ({
+          id: source.id,
+          name: source.name,
+          comment: source.comment,
+          type: resolvePointType(source.name),
+        })),
+        steps,
+        actions,
+        warnings,
+      });
+    }
+
+    const candidates = [];
+    for (const scope of scopes) {
+      for (let i = 0; i < scope.points.length; i += 1) {
+        for (let j = i + 1; j < scope.points.length; j += 1) {
+          const left = scope.points[i];
+          const right = scope.points[j];
+          const score = ideaSimilarity(left.name, right.name);
+          if (score >= threshold) {
+            candidates.push({
+              stage: { structureId: scope.stageStructureId, name: scope.stageName },
+              points: [
+                { id: left.id, name: left.name, comment: left.comment },
+                { id: right.id, name: right.name, comment: right.comment },
+              ],
+              score: Math.round(score * 100) / 100,
+              reason: 'Похожие названия или ключевые слова',
+              suggestedType: DEFAULT_POINT_TYPE,
+            });
+          }
+        }
+      }
+    }
+    candidates.sort((a, b) => b.score - a.score);
+
+    return {
+      check,
+      parentSectionId,
+      totalPoints: allPoints.length,
+      scopes: scopes.map((scope) => ({
+        stageStructureId: scope.stageStructureId,
+        stageName: scope.stageName,
+        points: scope.points.length,
+      })),
+      groups: plans,
+      candidates: candidates.slice(0, 25),
+      notes,
+    };
   }
 
   /**
@@ -757,18 +1115,30 @@ export class CheckService {
           if (!point?.name) {
             throw new SabyError(`У пункта этапа "${section.name}" нет name`);
           }
-          const pointName = normalizeTestName(point.name, point.type || 'ТК');
+          const pointType = resolvePointType(point.name, point.type);
+          const manual = Boolean(point.manual);
+          const pointName = normalizeTestName(point.name, pointType);
           const comment = point.comment ?? null;
           const description = formatTestDescription(point);
           const planned = clampPlannedMinutes(point.plannedMinutes);
           const statusComment = point.statusComment ?? null;
-          validatePointRules({
+          const validation = validatePointRules({
             name: pointName,
+            type: pointType,
             comment,
             description,
             plannedMinutes: planned.plannedMinutes,
+            automation: point.automation,
+            ideas: point.ideas,
+            steps: point.steps,
+            manual,
+            requireIdeas: true,
+            enforceTypeRules: true,
           });
-          const mark = normalizeMark(point.mark);
+          const mark =
+            point.mark != null
+              ? normalizeMark(point.mark)
+              : defaultMarkForType(pointType, { manual });
           if (pointName !== String(point.name).trim()) {
             warnings.push(`Название "${point.name}" нормализовано в "${pointName}"`);
           }
@@ -780,6 +1150,16 @@ export class CheckService {
           if (mark) {
             warnings.push(
               `Пометка "${mark.label}" для "${pointName}" зафиксирована в правилах, но не записана в Saby: примените в UI.`,
+            );
+          }
+          if (pointType === 'ЧЛ') {
+            warnings.push(
+              `"${pointName}" — ЧЛ с ${validation.ideasCount} идеями/шагами. Убедитесь, что это один сценарий.`,
+            );
+          }
+          if (pointType === 'ТК' && manual) {
+            warnings.push(
+              `"${pointName}" — ручное ТК-исключение: только для сложного сценария с точным порядком шагов.`,
             );
           }
           const existingPoint = byName(existingPoints, pointName);
@@ -794,15 +1174,21 @@ export class CheckService {
                 name: pointName,
                 id: existingPoint.docId,
                 mark: mark?.key ?? null,
+                manual,
               });
               await this.updatePoint(existingPoint.docId, {
                 name: pointName,
+                type: pointType,
                 comment,
                 description,
                 statusComment,
                 plannedMinutes: planned.plannedMinutes,
                 status: point.status,
                 assigneeId: point.assigneeId,
+                automation: point.automation,
+                manual,
+                ideas: point.ideas,
+                steps: point.steps,
                 mark: mark?.key,
               });
             } else {
@@ -824,6 +1210,7 @@ export class CheckService {
             name: pointName,
             plannedMinutes: planned.plannedMinutes,
             mark: mark?.key ?? null,
+            manual,
           });
           if (dryRun) continue;
           if (!stageStructureId) {
@@ -834,6 +1221,7 @@ export class CheckService {
           const created = await this.createPoint({
             checkId: check.id,
             parentSectionId: stageStructureId,
+            type: pointType,
             name: pointName,
             comment,
             description,
@@ -841,6 +1229,10 @@ export class CheckService {
             plannedMinutes: planned.plannedMinutes,
             status: point.status,
             assigneeId: point.assigneeId,
+            automation: point.automation,
+            manual,
+            ideas: point.ideas,
+            steps: point.steps,
             mark: mark?.key,
           });
           createdDocIds.push(created.id);

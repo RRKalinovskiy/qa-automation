@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { CheckService } from '../checks.mjs';
+import { CheckService, ideaSimilarity } from '../checks.mjs';
 import { decodeRecord } from '../records.mjs';
 
 function record(values) {
@@ -251,31 +251,84 @@ test('createStage создаёт этап с флагами раздела и п
   assert.equal(update['ЧеклистСтруктура.ПлановоеВремя'], 'P0DT0H30M0S');
 });
 
-test('createPoint создаёт пункт с флагами пункта и статусом', async () => {
+test('createPoint по умолчанию создаёт ЧЛ с двумя идеями и пометкой ПК', async () => {
   const client = new FakeClient();
   const service = new CheckService(client);
   const point = await service.createPoint({
     checkId: 10,
     parentSectionId: 200,
-    name: 'ТК: Новый пункт',
-    comment: 'Проверяем новый пункт',
+    name: 'Валидация контактных данных',
+    comment: 'Проверяем реакцию на невалидные телефон и email',
     precondition: ['Открыть карточку'],
-    steps: ['Изменить поле'],
-    expected: 'Поле изменено',
+    steps: ['Телефон: неверный формат', 'Email: неверный формат'],
+    expected: 'Показаны сообщения валидации',
     plannedMinutes: 5,
     status: 'Тестирование проведено',
   });
   assert.equal(point.id, 301);
+  assert.equal(point.type, 'ЧЛ');
+  assert.equal(point.ideasCount, 2);
+  assert.equal(point.mark, 'pc');
   const create = client.created.get(301);
   assert.equal(create['ЧеклистСтруктура.Раздел$'], false);
   assert.equal(create['ЧеклистСтруктура.Раздел@'], false);
   assert.equal(create['ЧеклистСтруктура.Раздел'], 200);
   const update = client.updated.get(301);
+  assert.equal(update['ЧеклистСтруктура.Название'], 'ЧЛ: Валидация контактных данных');
   assert.equal(update['ЧеклистСтруктура.ОбъектПланирования'], 488);
   assert.equal(update['ЧеклистСтруктура.ПлановоеВремя'], 'P0DT0H5M0S');
-  assert.equal(update['ЧеклистСтруктура.Комментарий'], 'Проверяем новый пункт');
+  assert.equal(update['ЧеклистСтруктура.Комментарий'], 'Проверяем реакцию на невалидные телефон и email');
   assert.match(update['ЧеклистСтруктура.Описание'], /^ПРЕДУСЛОВИЕ:/);
   assert.equal(update['ЧеклистСтруктура.Версия'], '');
+});
+
+test('createPoint запрещает ТК без automation и ЧЛ с одной идеей', async () => {
+  const client = new FakeClient();
+  const service = new CheckService(client);
+  await assert.rejects(
+    () =>
+      service.createPoint({
+        checkId: 10,
+        parentSectionId: 200,
+        type: 'ТК',
+        name: 'ТК: Неверный email',
+        comment: 'Проверяем валидацию email',
+        steps: ['Ввести неверный email'],
+        plannedMinutes: 5,
+      }),
+    /automation/,
+  );
+  await assert.rejects(
+    () =>
+      service.createPoint({
+        checkId: 10,
+        parentSectionId: 200,
+        type: 'ЧЛ',
+        name: 'ЧЛ: Неверный email',
+        comment: 'Проверяем валидацию email',
+        steps: ['Ввести неверный email'],
+        plannedMinutes: 5,
+      }),
+    /минимум 2/,
+  );
+});
+
+test('updatePoint с type ЧЛ переименовывает ошибочный ТК', async () => {
+  const client = new FakeClient();
+  const service = new CheckService(client);
+  client.updated.set(301, {
+    'ЧеклистСтруктура.Название': 'ТК: Неверный email',
+    'ЧеклистСтруктура.Комментарий': 'Проверяем валидацию email',
+    'ЧеклистСтруктура.Раздел': [200],
+  });
+  const point = await service.updatePoint(301, {
+    type: 'ЧЛ',
+    steps: ['Ввести неверный email', 'Нажать «Сохранить»'],
+  });
+  assert.equal(point.name, 'ЧЛ: Неверный email');
+  assert.equal(point.type, 'ЧЛ');
+  const update = client.updated.get(301);
+  assert.equal(update['ЧеклистСтруктура.Название'], 'ЧЛ: Неверный email');
 });
 
 test('setStatus передаёт пункты и статус', async () => {
@@ -317,7 +370,14 @@ test('importScenario dryRun ничего не создаёт', async () => {
     sections: [
       {
         name: 'Новый этап',
-        points: [{ name: 'ТК: Новый пункт', comment: 'Проверяем новый пункт', plannedMinutes: 5 }],
+        points: [
+          {
+            name: 'Валидация контактных данных',
+            comment: 'Проверяем телефон и email',
+            steps: ['Телефон: неверный формат', 'Email: неверный формат'],
+            plannedMinutes: 5,
+          },
+        ],
       },
     ],
   });
@@ -326,4 +386,42 @@ test('importScenario dryRun ничего не создаёт', async () => {
   assert.equal(client.created.size, 0);
   assert.ok(result.plan.some((item) => item.action === 'createStage'));
   assert.ok(result.plan.some((item) => item.action === 'createPoint'));
+});
+
+test('planMerge строит read-only план объединения идей в ЧЛ', async () => {
+  const client = new FakeClient();
+  const service = new CheckService(client);
+  client.updated.set(210, {
+    'ЧеклистСтруктура.Название': 'ТК: Неверный формат телефона',
+    'ЧеклистСтруктура.Комментарий': 'Проверяем сообщение валидации телефона',
+  });
+  const plan = await service.planMerge({
+    checkId: 10,
+    parentSectionId: 100,
+    groups: [
+      {
+        targetName: 'ЧЛ: Валидация контактных данных',
+        pointIds: [210],
+      },
+    ],
+  });
+  assert.equal(plan.totalPoints, 1);
+  assert.equal(plan.groups.length, 1);
+  const [group] = plan.groups;
+  assert.equal(group.target.name, 'ЧЛ: Валидация контактных данных');
+  assert.ok(group.actions.some((action) => action.action === 'createChecklist'));
+  assert.ok(group.actions.some((action) => action.action === 'addStep'));
+  assert.ok(group.actions.some((action) => action.action === 'deleteSource'));
+  assert.ok(group.warnings.some((warning) => /минимум 2/.test(warning)));
+  assert.equal(client.created.size, 0);
+});
+
+test('ideaSimilarity находит близкие идеи', () => {
+  assert.ok(
+    ideaSimilarity(
+      'ТК: Неверный формат email',
+      'ТК: Неверный формат телефона',
+    ) >= 0.5,
+  );
+  assert.ok(ideaSimilarity('ТК: Сохранение', 'ТК: Удаление') < 0.5);
 });
