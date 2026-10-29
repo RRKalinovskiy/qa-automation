@@ -9,6 +9,13 @@ import {
   minutesToDuration,
 } from './records.mjs';
 import {
+  clampPlannedMinutes,
+  formatTestDescription,
+  normalizeMark,
+  normalizeTestName,
+  validatePointRules,
+} from './rules.mjs';
+import {
   DEFAULT_STATUSES,
   normalizeStatuses,
   resolveStatus,
@@ -187,6 +194,7 @@ export class CheckService {
       parentStructureId: firstValue(record['ЧеклистСтруктура.Раздел']),
       checkId: record['ЧеклистСтруктура.БазовыйРаздел'] ?? null,
       name: record['ЧеклистСтруктура.Название'] ?? null,
+      comment: record['ЧеклистСтруктура.Комментарий'] ?? null,
       description: record['ЧеклистСтруктура.Версия'] ?? null,
       statusId: record['ЧеклистСтруктура.ОбъектПланирования'] ?? null,
       statusName: statusName(record['ЧеклистСтруктура.ОбъектПланирования']),
@@ -392,6 +400,7 @@ export class CheckService {
     });
     const stageId = extractId(raw, 'ПунктПроверки.Создать');
     await this.updatePoint(stageId, {
+      isStage: true,
       name: options.name,
       description: options.description,
       plannedMinutes: options.plannedMinutes,
@@ -406,6 +415,17 @@ export class CheckService {
         'Не указан parentSectionId — структура этапа/раздела, внутри которого создаётся пункт',
       );
     }
+    const name = normalizeTestName(options.name, options.type || 'ТК');
+    const comment = options.comment ?? null;
+    const description = formatTestDescription(options);
+    const planned = clampPlannedMinutes(options.plannedMinutes);
+    validatePointRules({
+      name,
+      comment,
+      description,
+      plannedMinutes: planned.plannedMinutes,
+    });
+    const mark = normalizeMark(options.mark);
     const userId =
       check.employeeId ??
       (process.env.SABY_EMPLOYEE_ID ? Number(process.env.SABY_EMPLOYEE_ID) : null);
@@ -437,38 +457,87 @@ export class CheckService {
     });
     const pointId = extractId(raw, 'ПунктПроверки.Создать');
     await this.updatePoint(pointId, {
-      name: options.name,
-      description: options.description,
-      plannedMinutes: options.plannedMinutes,
+      name,
+      comment,
+      description,
+      plannedMinutes: planned.plannedMinutes,
       status: options.status,
       assigneeId: options.assigneeId,
     });
-    return this.readPoint(pointId);
+    const point = await this.readPoint(pointId);
+    return {
+      ...point,
+      mark: mark?.key ?? null,
+      rules: {
+        nameNormalized: name !== String(options.name ?? '').trim(),
+        plannedMinutesClamped: planned.clamped,
+      },
+    };
   }
 
   async updatePoint(pointId, fields) {
+    const isStage = Boolean(fields.isStage);
     const recordFields = [
       { name: '@Документ', type: 'Число целое', value: Number(pointId) },
     ];
-    if (fields.name != null) {
+    const normalizedName =
+      fields.name != null
+        ? isStage
+          ? String(fields.name).trim()
+          : normalizeTestName(fields.name, fields.type || 'ТК')
+        : null;
+    const comment = fields.comment != null ? String(fields.comment).trim() : null;
+    const description =
+      fields.description != null ||
+      fields.precondition != null ||
+      fields.steps != null ||
+      fields.expected != null
+        ? formatTestDescription(fields)
+        : null;
+    const planned =
+      fields.plannedMinutes != null
+        ? isStage
+          ? { plannedMinutes: Number(fields.plannedMinutes), clamped: false }
+          : clampPlannedMinutes(fields.plannedMinutes)
+        : null;
+    const nameForValidation =
+      normalizedName ?? (fields.currentName ? String(fields.currentName).trim() : null);
+    if (!isStage) {
+      validatePointRules({
+        name: nameForValidation ?? 'ТК: partial',
+        comment: comment ?? undefined,
+        description: description ?? undefined,
+        plannedMinutes: planned?.plannedMinutes ?? 0,
+        requireComment: false,
+      });
+    }
+    const mark = isStage ? null : normalizeMark(fields.mark);
+    if (normalizedName != null) {
       recordFields.push({
         name: 'ЧеклистСтруктура.Название',
         type: 'Строка',
-        value: fields.name,
+        value: normalizedName,
       });
     }
-    if (fields.description != null) {
+    if (comment != null) {
+      recordFields.push({
+        name: 'ЧеклистСтруктура.Комментарий',
+        type: 'Строка',
+        value: comment,
+      });
+    }
+    if (description != null) {
       recordFields.push({
         name: 'ЧеклистСтруктура.Версия',
         type: 'Строка',
-        value: fields.description,
+        value: description,
       });
     }
-    if (fields.plannedMinutes != null) {
+    if (planned != null) {
       recordFields.push({
         name: 'ЧеклистСтруктура.ПлановоеВремя',
         type: 'Строка',
-        value: minutesToDuration(fields.plannedMinutes),
+        value: minutesToDuration(planned.plannedMinutes),
       });
     }
     if (fields.status != null) {
@@ -491,7 +560,15 @@ export class CheckService {
     await this.client.call('ПунктПроверки.Записать', {
       Запись: encodeRecord(recordFields),
     });
-    return this.readPoint(pointId);
+    const point = await this.readPoint(pointId);
+    return {
+      ...point,
+      mark: mark?.key ?? null,
+      rules: {
+        nameNormalized: normalizedName != null && normalizedName !== fields.name,
+        plannedMinutesClamped: planned?.clamped ?? false,
+      },
+    };
   }
 
   async setStatus(checkId, pointIds, status) {
@@ -653,38 +730,67 @@ export class CheckService {
           if (!point?.name) {
             throw new SabyError(`У пункта этапа "${section.name}" нет name`);
           }
-          const existingPoint = byName(existingPoints, point.name);
+          const pointName = normalizeTestName(point.name, point.type || 'ТК');
+          const comment = point.comment ?? null;
+          const description = formatTestDescription(point);
+          const planned = clampPlannedMinutes(point.plannedMinutes);
+          validatePointRules({
+            name: pointName,
+            comment,
+            description,
+            plannedMinutes: planned.plannedMinutes,
+          });
+          const mark = normalizeMark(point.mark);
+          if (pointName !== String(point.name).trim()) {
+            warnings.push(`Название "${point.name}" нормализовано в "${pointName}"`);
+          }
+          if (planned.clamped) {
+            warnings.push(
+              `Плановое время пункта "${pointName}" уменьшено до ${planned.plannedMinutes} мин`,
+            );
+          }
+          const existingPoint = byName(existingPoints, pointName);
           if (existingPoint) {
             if (onExisting === 'error') {
-              throw new SabyError(`Пункт "${point.name}" уже существует в "${section.name}"`);
+              throw new SabyError(`Пункт "${pointName}" уже существует в "${section.name}"`);
             }
             if (updateExisting && !dryRun) {
               plan.push({
                 action: 'updatePoint',
                 section: section.name,
-                name: point.name,
+                name: pointName,
                 id: existingPoint.docId,
+                mark: mark?.key ?? null,
               });
               await this.updatePoint(existingPoint.docId, {
-                name: point.name,
-                description: point.description,
-                plannedMinutes: point.plannedMinutes,
+                name: pointName,
+                comment,
+                description,
+                plannedMinutes: planned.plannedMinutes,
                 status: point.status,
                 assigneeId: point.assigneeId,
+                mark: mark?.key,
               });
             } else {
               plan.push({
                 action: 'reusePoint',
                 section: section.name,
-                name: point.name,
+                name: pointName,
                 id: existingPoint.docId,
+                mark: mark?.key ?? null,
               });
-              warnings.push(`Пункт "${point.name}" уже существует — пропущен`);
+              warnings.push(`Пункт "${pointName}" уже существует — пропущен`);
             }
             continue;
           }
 
-          plan.push({ action: 'createPoint', section: section.name, name: point.name });
+          plan.push({
+            action: 'createPoint',
+            section: section.name,
+            name: pointName,
+            plannedMinutes: planned.plannedMinutes,
+            mark: mark?.key ?? null,
+          });
           if (dryRun) continue;
           if (!stageStructureId) {
             throw new SabyError(
@@ -694,11 +800,13 @@ export class CheckService {
           const created = await this.createPoint({
             checkId: check.id,
             parentSectionId: stageStructureId,
-            name: point.name,
-            description: point.description,
-            plannedMinutes: point.plannedMinutes,
+            name: pointName,
+            comment,
+            description,
+            plannedMinutes: planned.plannedMinutes,
             status: point.status,
             assigneeId: point.assigneeId,
+            mark: mark?.key,
           });
           createdDocIds.push(created.id);
         }

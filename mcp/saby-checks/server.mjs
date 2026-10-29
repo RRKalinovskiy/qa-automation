@@ -17,6 +17,12 @@ import 'dotenv/config';
 import { CheckService, DEFAULT_TEMPLATE_ID } from './checks.mjs';
 import { SabyClient, SabyError } from './client.mjs';
 import { DEFAULT_STATUSES } from './statuses.mjs';
+import {
+  MARK_RULES,
+  MAX_PLANNED_MINUTES,
+  TEST_NAME_PREFIXES,
+  rulesSummary,
+} from './rules.mjs';
 
 const server = new McpServer({
   name: 'saby-checks',
@@ -178,6 +184,19 @@ server.registerTool(
 );
 
 server.registerTool(
+  'saby_check_rules',
+  {
+    title: 'Правила оформления тестов',
+    description:
+      'Возвращает правила оформления тестов Saby: префиксы ТК/ЧЛ/Т, поля «Комментарий» и «Описание», ' +
+      'формат ПРЕДУСЛОВИЯ, лимит 5 минут и mapping пометок (ПК/МК/АТ).',
+    inputSchema: z.object({}),
+    annotations: { readOnlyHint: true },
+  },
+  async () => ok(rulesSummary()),
+);
+
+server.registerTool(
   'saby_check_create',
   {
     title: 'Создать проверку',
@@ -268,17 +287,40 @@ server.registerTool(
   {
     title: 'Создать пункт проверки',
     description:
-      'Создаёт пункт внутри этапа/раздела. parentSectionId — structureId этапа из saby_check_tree. ' +
-      'Пишет название, описание (ЧеклистСтруктура.Версия), плановое время и статус. ' +
-      'По умолчанию статус «Не тестировался».',
+      'Создаёт тест внутри этапа. Соблюдает правила: имя начинается с ТК/ЧЛ/Т, короткое описание — ' +
+      'в «Комментарий», предварительные шаги — в «Описание» (ПРЕДУСЛОВИЕ), план не более 5 минут. ' +
+      'parentSectionId — structureId этапа из saby_check_tree.',
     inputSchema: z.object({
       check: checkRef,
       parentSectionId: z.number().int().positive(),
-      name: z.string().min(1),
-      description: z.string().optional(),
-      plannedMinutes: z.number().int().min(0).max(6000).optional(),
+      type: z.enum(['ТК', 'ЧЛ', 'Т']).default('ТК'),
+      name: z.string().min(1).describe('Название теста; префикс ТК/ЧЛ/Т обязателен'),
+      comment: z
+        .string()
+        .min(1)
+        .describe('Короткое описание, что проверяем — поле «Комментарий»'),
+      description: z.string().optional().describe('Готовое описание, если уже собрано'),
+      precondition: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .describe('Предварительные шаги; формат ПРЕДУСЛОВИЕ: 1. ...'),
+      steps: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .describe('Шаги теста'),
+      expected: z.string().optional().describe('Ожидаемый результат'),
+      plannedMinutes: z
+        .number()
+        .int()
+        .min(0)
+        .max(MAX_PLANNED_MINUTES)
+        .default(MAX_PLANNED_MINUTES),
       status: statusValue.optional(),
       assigneeId: z.number().int().positive().optional(),
+      mark: z
+        .enum(['pc', 'mobile_important', 'mobile_minor', 'mobile_noncritical', 'automated'])
+        .optional()
+        .describe('Пометка по правилам: pc — ПК, mobile_* — МК, automated — АТ'),
       dryRun: z.boolean().default(false),
     }),
   },
@@ -292,20 +334,31 @@ server.registerTool(
           check: compactCheck(checkInfo),
           parentSectionId: input.parentSectionId,
           name: input.name,
+          comment: input.comment,
           description: input.description ?? null,
-          plannedMinutes: input.plannedMinutes ?? null,
+          precondition: input.precondition ?? null,
+          steps: input.steps ?? null,
+          expected: input.expected ?? null,
+          plannedMinutes: input.plannedMinutes,
           status: input.status ?? 'Не тестировался',
           assigneeId: input.assigneeId ?? null,
+          mark: input.mark ?? null,
         });
       }
       const point = await getService().createPoint({
         checkId: checkInfo.id,
         parentSectionId: input.parentSectionId,
+        type: input.type,
         name: input.name,
+        comment: input.comment,
         description: input.description,
+        precondition: input.precondition,
+        steps: input.steps,
+        expected: input.expected,
         plannedMinutes: input.plannedMinutes,
         status: input.status,
         assigneeId: input.assigneeId,
+        mark: input.mark,
       });
       return ok({ check: compactCheck(checkInfo), point: compactPoint(point) });
     } catch (error) {
@@ -319,15 +372,24 @@ server.registerTool(
   {
     title: 'Изменить пункт проверки',
     description:
-      'Частично обновляет пункт или этап: название, описание, плановое время, статус, ответственного. ' +
-      'pointId — id документа (docId из дерева). После записи перечитывает объект.',
+      'Частично обновляет тест: название, «Комментарий», «Описание» (ПРЕДУСЛОВИЕ/ШАГИ/РЕЗУЛЬТАТ), ' +
+      'план (не более 5 минут), статус, ответственного. pointId — id документа из saby_check_tree.',
     inputSchema: z.object({
       pointId: pointRef,
+      type: z.enum(['ТК', 'ЧЛ', 'Т']).default('ТК'),
       name: z.string().min(1).optional(),
+      comment: z.string().min(1).optional().describe('Короткое описание, что проверяем'),
       description: z.string().optional(),
-      plannedMinutes: z.number().int().min(0).max(6000).optional(),
+      precondition: z.union([z.string(), z.array(z.string())]).optional(),
+      steps: z.union([z.string(), z.array(z.string())]).optional(),
+      expected: z.string().optional(),
+      plannedMinutes: z.number().int().min(0).max(MAX_PLANNED_MINUTES).optional(),
       status: statusValue.optional(),
       assigneeId: z.number().int().positive().optional(),
+      mark: z
+        .enum(['pc', 'mobile_important', 'mobile_minor', 'mobile_noncritical', 'automated'])
+        .optional(),
+      isStage: z.boolean().default(false).describe('true — обновляется этап, а не тест'),
     }),
   },
   async (input) => {
@@ -454,9 +516,9 @@ server.registerTool(
   {
     title: 'Импортировать сценарий в проверку',
     description:
-      'Создаёт этапы и пункты из структурированного сценария. Сначала вызывайте с dryRun=true и покажите план. ' +
-      'По умолчанию существующие этапы/пункты переиспользуются, статусы существующих не меняются. ' +
-      'При ошибке созданные в этом вызове объекты удаляются (cleanupOnError=true).',
+      'Создаёт этапы и тесты из структурированного сценария по правилам: имена ТК/ЧЛ/Т, «Комментарий», ' +
+      '«Описание» с ПРЕДУСЛОВИЕМ, план не более 5 минут, пометки ПК/МК/АТ. ' +
+      'Сначала вызывайте с dryRun=true. Существующие этапы/тесты переиспользуются.',
     inputSchema: z.object({
       check: checkRef,
       parentSectionId: z.number().int().positive().optional(),
@@ -469,11 +531,24 @@ server.registerTool(
             points: z
               .array(
                 z.object({
+                  type: z.enum(['ТК', 'ЧЛ', 'Т']).default('ТК'),
                   name: z.string().min(1),
+                  comment: z.string().min(1),
                   description: z.string().optional(),
-                  plannedMinutes: z.number().int().min(0).max(6000).optional(),
+                  precondition: z.union([z.string(), z.array(z.string())]).optional(),
+                  steps: z.union([z.string(), z.array(z.string())]).optional(),
+                  expected: z.string().optional(),
+                  plannedMinutes: z
+                    .number()
+                    .int()
+                    .min(0)
+                    .max(MAX_PLANNED_MINUTES)
+                    .default(MAX_PLANNED_MINUTES),
                   status: statusValue.optional(),
                   assigneeId: z.number().int().positive().optional(),
+                  mark: z
+                    .enum(['pc', 'mobile_important', 'mobile_minor', 'mobile_noncritical', 'automated'])
+                    .optional(),
                 }),
               )
               .default([]),

@@ -255,9 +255,12 @@ test('createPoint создаёт пункт с флагами пункта и с
   const point = await service.createPoint({
     checkId: 10,
     parentSectionId: 200,
-    name: 'Новый пункт',
-    description: 'Шаги',
-    plannedMinutes: 10,
+    name: 'ТК: Новый пункт',
+    comment: 'Проверяем новый пункт',
+    precondition: ['Открыть карточку'],
+    steps: ['Изменить поле'],
+    expected: 'Поле изменено',
+    plannedMinutes: 5,
     status: 'Тестирование проведено',
   });
   assert.equal(point.id, 301);
@@ -267,7 +270,9 @@ test('createPoint создаёт пункт с флагами пункта и с
   assert.equal(create['ЧеклистСтруктура.Раздел'], 200);
   const update = client.updated.get(301);
   assert.equal(update['ЧеклистСтруктура.ОбъектПланирования'], 488);
-  assert.equal(update['ЧеклистСтруктура.ПлановоеВремя'], 'P0DT0H10M0S');
+  assert.equal(update['ЧеклистСтруктура.ПлановоеВремя'], 'P0DT0H5M0S');
+  assert.equal(update['ЧеклистСтруктура.Комментарий'], 'Проверяем новый пункт');
+  assert.match(update['ЧеклистСтруктура.Версия'], /^ПРЕДУСЛОВИЕ:/);
 });
 
 test('setStatus передаёт пункты и статус', async () => {
@@ -309,7 +314,7 @@ test('importScenario dryRun ничего не создаёт', async () => {
     sections: [
       {
         name: 'Новый этап',
-        points: [{ name: 'Новый пункт' }],
+        points: [{ name: 'ТК: Новый пункт', comment: 'Проверяем новый пункт', plannedMinutes: 5 }],
       },
     ],
   });

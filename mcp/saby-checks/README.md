@@ -22,6 +22,7 @@ npm run mcp:saby       # запустить сервер вручную (stdio)
 | `saby_check_point_get` | карточка пункта/этапа |
 | `saby_check_tree` | этапы и пункты |
 | `saby_check_statuses` | статусы и id |
+| `saby_check_rules` | правила оформления тестов: ТК/ЧЛ/Т, комментарий, ПРЕДУСЛОВИЕ, 5 минут, пометки |
 | `saby_check_create` | создать проверку |
 | `saby_check_stage_create` | создать этап |
 | `saby_check_point_create` | создать пункт |

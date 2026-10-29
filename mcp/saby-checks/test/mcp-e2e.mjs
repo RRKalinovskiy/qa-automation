@@ -196,7 +196,7 @@ try {
         check: '10',
         parentSectionId: 100,
         dryRun: true,
-        sections: [{ name: 'Этап 1', points: [{ name: 'Новый пункт' }] }],
+        sections: [{ name: 'Этап 1', points: [{ name: 'ТК: Новый пункт', comment: 'Проверяем новый пункт', plannedMinutes: 5 }] }],
       },
     }),
   );
