@@ -468,6 +468,12 @@ export class CheckService {
     return {
       ...point,
       mark: mark?.key ?? null,
+      warnings: mark
+        ? [
+            `Пометка "${mark.label}" зафиксирована в правилах, но не записана в Saby: ` +
+              'примените её в UI или полной записью документа.',
+          ]
+        : [],
       rules: {
         nameNormalized: name !== String(options.name ?? '').trim(),
         plannedMinutesClamped: planned.clamped,
@@ -564,6 +570,12 @@ export class CheckService {
     return {
       ...point,
       mark: mark?.key ?? null,
+      warnings: mark
+        ? [
+            `Пометка "${mark.label}" зафиксирована в правилах, но не записана в Saby: ` +
+              'примените её в UI или полной записью документа.',
+          ]
+        : [],
       rules: {
         nameNormalized: normalizedName != null && normalizedName !== fields.name,
         plannedMinutesClamped: planned?.clamped ?? false,
@@ -747,6 +759,11 @@ export class CheckService {
           if (planned.clamped) {
             warnings.push(
               `Плановое время пункта "${pointName}" уменьшено до ${planned.plannedMinutes} мин`,
+            );
+          }
+          if (mark) {
+            warnings.push(
+              `Пометка "${mark.label}" для "${pointName}" зафиксирована в правилах, но не записана в Saby: примените в UI.`,
             );
           }
           const existingPoint = byName(existingPoints, pointName);
