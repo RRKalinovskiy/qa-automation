@@ -462,14 +462,19 @@ server.registerTool(
   {
     title: 'Создать этап проверки',
     description:
-      'Создаёт этап (раздел) внутри указанного этапа/раздела проверки. ' +
+      'Создаёт этап (раздел/папку) внутри указанного этапа/раздела проверки. ' +
       'parentSectionId — structureId родителя из saby_check_tree. ' +
+      'comment — короткое описание папки для блока «Общее описание» → «Комментарий». ' +
       'Создание корневых этапов через API не поддерживается: если parentSectionId не задан, ' +
       'используется первый корневой этап проверки.',
     inputSchema: z.object({
       check: checkRef,
       parentSectionId: z.number().int().positive().optional(),
       name: z.string().min(1),
+      comment: z
+        .string()
+        .optional()
+        .describe('Короткое описание — поле «Общее описание» → «Комментарий»'),
       description: z.string().optional(),
       plannedMinutes: z.number().int().min(0).max(6000).optional(),
       dryRun: z.boolean().default(false),
@@ -487,6 +492,7 @@ server.registerTool(
           check: compactCheck(checkInfo),
           parentSectionId,
           name: input.name,
+          comment: input.comment ?? null,
           description: input.description ?? null,
           plannedMinutes: input.plannedMinutes ?? null,
         });
@@ -495,6 +501,7 @@ server.registerTool(
         checkId: checkInfo.id,
         parentSectionId,
         name: input.name,
+        comment: input.comment,
         description: input.description,
         plannedMinutes: input.plannedMinutes,
       });
@@ -717,19 +724,20 @@ server.registerTool(
   async ({ check, itemIds, recursive }) => {
     try {
       const checkInfo = await getService().resolveCheck(check);
+      const baseCheckId = checkInfo.baseSectionId ?? checkInfo.id;
       const structureIds = [];
       for (const itemId of itemIds) {
         const point = await getService().readPoint(itemId);
-        if (Number(point.checkId) !== Number(checkInfo.id)) {
+        if (Number(point.checkId) !== Number(baseCheckId)) {
           throw new SabyError(
-            `Объект ${itemId} принадлежит проверке ${point.checkId}, а не ${checkInfo.id}. Удаление отменено.`,
+            `Объект ${itemId} принадлежит проверке ${point.checkId}, а не ${baseCheckId}. Удаление отменено.`,
           );
         }
         if (point.structureId == null) {
           throw new SabyError(`У объекта ${itemId} нет id структуры`);
         }
         const children = await getService().listChildren(
-          checkInfo.id,
+          baseCheckId,
           point.structureId,
         );
         if (children.length > 0 && !recursive) {
@@ -741,7 +749,7 @@ server.registerTool(
         if (recursive) {
           structureIds.push(
             ...(await getService().collectStructureIds(
-              checkInfo.id,
+              baseCheckId,
               point.structureId,
             )),
           );

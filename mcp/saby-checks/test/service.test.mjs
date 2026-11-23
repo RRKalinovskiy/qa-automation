@@ -237,6 +237,7 @@ test('createStage создаёт этап с флагами раздела и п
     checkId: 10,
     parentSectionId: 100,
     name: 'Новый этап',
+    comment: 'Короткое описание',
     description: 'Описание',
     plannedMinutes: 30,
   });
@@ -248,6 +249,7 @@ test('createStage создаёт этап с флагами раздела и п
   assert.equal(create['ЧеклистСтруктура.БазовыйРаздел'], 10);
   const update = client.updated.get(300);
   assert.equal(update['ЧеклистСтруктура.Название'], 'Новый этап');
+  assert.equal(update['ЧеклистСтруктура.Комментарий'], 'Короткое описание');
   assert.equal(update['ЧеклистСтруктура.ПлановоеВремя'], 'P0DT0H30M0S');
 });
 

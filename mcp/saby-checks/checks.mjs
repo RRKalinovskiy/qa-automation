@@ -232,6 +232,7 @@ export class CheckService {
       templateId: record['ОбъектПланирования.@ОбъектПланирования'] ?? null,
       template: record['ОбъектПланирования.Название'] ?? null,
       structureRootId: record['ЧеклистСтруктура.@ЧеклистСтруктура'] ?? null,
+      baseSectionId: record['ЧеклистСтруктура.БазовыйРаздел'] ?? null,
       url: guid ? `${this.client.baseUrl}/doc/${guid}?client=3` : null,
       raw: record,
     };
@@ -282,6 +283,7 @@ export class CheckService {
         structureId,
         docId: row['Документ'] ?? null,
         name: row['ЧеклистСтруктура.Название'] ?? null,
+        comment: row['ЧеклистСтруктура.Комментарий'] ?? null,
         description: row['ЧеклистСтруктура.Версия'] ?? null,
         parentStructureId: firstValue(row['ЧеклистСтруктура.Раздел']),
         statusId: row['ЧеклистСтруктура.ОбъектПланирования'] ?? null,
@@ -297,9 +299,11 @@ export class CheckService {
 
   async getTree(checkId, depth = 2) {
     const check = await this.readCheck(checkId);
+    const baseSectionId = check.baseSectionId ?? check.id;
+    const isNestedCheck = Number(baseSectionId) !== Number(check.id);
     const visited = new Set();
     const walk = async (parentStructureId, level) => {
-      const children = await this.listChildren(checkId, parentStructureId);
+      const children = await this.listChildren(baseSectionId, parentStructureId);
       const result = [];
       for (const child of children) {
         if (child.structureId == null || visited.has(child.structureId)) continue;
@@ -314,7 +318,10 @@ export class CheckService {
       }
       return result;
     };
-    const stages = await walk(null, 1);
+    const stages = await walk(
+      isNestedCheck ? check.structureRootId : null,
+      1,
+    );
     return { check, stages };
   }
 
@@ -351,7 +358,15 @@ export class CheckService {
   }
 
   async defaultParentSectionId(checkId) {
-    const roots = await this.listChildren(checkId, null);
+    const check = await this.readCheck(checkId);
+    const baseSectionId = check.baseSectionId ?? check.id;
+    if (
+      Number(baseSectionId) !== Number(check.id) &&
+      check.structureRootId != null
+    ) {
+      return check.structureRootId;
+    }
+    const roots = await this.listChildren(baseSectionId, null);
     const first = roots.find((root) => root.structureId != null && !root.deleted);
     if (!first) {
       throw new SabyError(
@@ -425,6 +440,7 @@ export class CheckService {
 
   async createStage(options) {
     const check = await this.readCheck(options.checkId);
+    const baseSectionId = check.baseSectionId ?? check.id;
     const parentSectionId =
       options.parentSectionId ?? (await this.defaultParentSectionId(check.id));
     const userId =
@@ -447,7 +463,7 @@ export class CheckService {
         { name: 'Подразделение', type: 'Число целое', value: departmentId },
         { name: 'Сотрудник', type: 'Число целое', value: userId },
         { name: 'ТипДокумента.ТипДокумента', type: 'Строка', value: POINT_DOC_TYPE },
-        { name: 'ЧеклистСтруктура.БазовыйРаздел', type: 'Число целое', value: check.id },
+        { name: 'ЧеклистСтруктура.БазовыйРаздел', type: 'Число целое', value: baseSectionId },
         { name: 'ЧеклистСтруктура.Раздел', type: 'Число целое', value: parentSectionId },
         { name: 'ЧеклистСтруктура.Раздел$', type: 'Логическое', value: true },
         { name: 'ЧеклистСтруктура.Раздел@', type: 'Логическое', value: true },
@@ -460,6 +476,7 @@ export class CheckService {
     await this.updatePoint(stageId, {
       isStage: true,
       name: options.name,
+      comment: options.comment,
       description: options.description,
       plannedMinutes: options.plannedMinutes,
     });
@@ -468,6 +485,7 @@ export class CheckService {
 
   async createPoint(options) {
     const check = await this.readCheck(options.checkId);
+    const baseSectionId = check.baseSectionId ?? check.id;
     if (options.parentSectionId == null) {
       throw new SabyError(
         'Не указан parentSectionId — структура этапа/раздела, внутри которого создаётся пункт',
@@ -534,7 +552,7 @@ export class CheckService {
         { name: 'Подразделение', type: 'Число целое', value: departmentId },
         { name: 'Сотрудник', type: 'Число целое', value: userId },
         { name: 'ТипДокумента.ТипДокумента', type: 'Строка', value: POINT_DOC_TYPE },
-        { name: 'ЧеклистСтруктура.БазовыйРаздел', type: 'Число целое', value: check.id },
+        { name: 'ЧеклистСтруктура.БазовыйРаздел', type: 'Число целое', value: baseSectionId },
         { name: 'ЧеклистСтруктура.Раздел', type: 'Число целое', value: options.parentSectionId },
         { name: 'ЧеклистСтруктура.Раздел$', type: 'Логическое', value: false },
         { name: 'ЧеклистСтруктура.Раздел@', type: 'Логическое', value: false },
