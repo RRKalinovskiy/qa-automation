@@ -35,13 +35,26 @@ npm run report         # HTML-отчёт
 ## MCP проверок Saby
 
 Локальный MCP `saby-checks` умеет читать проверку, создавать этапы и пункты,
-менять статусы и импортировать сценарий.
+менять статусы и импортировать сценарий. Для массового создания папок-этапов
+есть инструмент `saby_check_stage_bulk_create` и CLI.
 
 ```bash
 npm run saby:login     # один раз: войти в Saby и сохранить сессию
 npm run saby:session   # проверить, что API отвечает
 npm run test:mcp       # unit + smoke MCP
+
+# массово создать папки-этапы из JSON (сначала dry-run)
+npm run saby:bulk-stages -- \
+  --check https://online.sbis.ru/doc/<guid>?client=3 \
+  --parent <structureId> \
+  --file docs/scenarios/api-local-contractors-folders.json \
+  --dry-run
 ```
+
+Формат файла: `{ "folders": [...], "groups": [{ "name": "...", "folders": [...] }] }`.
+Пример со всеми методами проекта — `docs/scenarios/api-local-contractors-folders.json`.
+Если в карточке проверки не заполнены сотрудник/подразделение, задайте
+`SABY_EMPLOYEE_ID` и `SABY_DEPARTMENT_ID`.
 
 Авторизация хранится в `.auth/saby.json` (в `.gitignore`). Альтернатива —
 переменная `SABY_COOKIE` с полной строкой Cookie. Если MCP уже был

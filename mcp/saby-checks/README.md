@@ -36,6 +36,7 @@ npm run mcp:saby       # запустить сервер вручную (stdio)
 | `saby_project_check_draft` | черновик проверки по проекту (только чтение) |
 | `saby_check_create` | создать проверку |
 | `saby_check_stage_create` | создать этап (папку), в том числе с коротким комментарием |
+| `saby_check_stage_bulk_create` | массово создать папки-этапы по списку, с группами и `dryRun` |
 | `saby_check_point_create` | создать пункт (ЧЛ по умолчанию; ТК — тест-кейс, automation не обязателен) |
 | `saby_check_point_update` | изменить пункт/этап |
 | `saby_check_status_set` | массово сменить статус |

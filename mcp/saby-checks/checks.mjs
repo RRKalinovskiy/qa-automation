@@ -439,7 +439,7 @@ export class CheckService {
   }
 
   async createStage(options) {
-    const check = await this.readCheck(options.checkId);
+    const check = options.check ?? (await this.readCheck(options.checkId));
     const baseSectionId = check.baseSectionId ?? check.id;
     const parentSectionId =
       options.parentSectionId ?? (await this.defaultParentSectionId(check.id));
@@ -583,6 +583,236 @@ export class CheckService {
       rules: {
         nameNormalized: name !== String(options.name ?? '').trim(),
         plannedMinutesClamped: planned.clamped,
+      },
+    };
+  }
+
+  async bulkCreateStages(options = {}) {
+    const check = options.check ?? (await this.readCheck(options.checkId));
+    const checkId = check.id;
+    const baseSectionId = check.baseSectionId ?? checkId;
+    const isNestedCheck = Number(baseSectionId) !== Number(checkId);
+    const rootParentId =
+      options.parentSectionId ??
+      (isNestedCheck
+        ? check.structureRootId
+        : await this.defaultParentSectionId(checkId));
+    if (rootParentId == null) {
+      throw new SabyError('Не удалось определить родительский этап для папок');
+    }
+
+    const folders = Array.isArray(options.folders) ? options.folders : [];
+    const groups = Array.isArray(options.groups) ? options.groups : [];
+    if (folders.length === 0 && groups.length === 0) {
+      throw new SabyError('Передайте folders и/или groups — список папок для создания');
+    }
+
+    const updateExisting = options.updateExisting !== false;
+    const dryRun = Boolean(options.dryRun);
+    const delayMs = Number.isFinite(options.delayMs)
+      ? Math.max(0, Number(options.delayMs))
+      : 100;
+    const plan = [];
+    const created = [];
+    const updated = [];
+    const skipped = [];
+    const failed = [];
+    const childrenCache = new Map();
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const normalize = (item, context) => {
+      const name = String(item?.name ?? '').trim();
+      if (!name) {
+        throw new SabyError(
+          `Не указано название папки${context ? ` (${context})` : ''}`,
+        );
+      }
+      return {
+        name,
+        comment: item?.comment ?? null,
+        description: item?.description ?? null,
+        plannedMinutes: item?.plannedMinutes ?? null,
+      };
+    };
+
+    const getChildren = async (parentId) => {
+      if (!childrenCache.has(parentId)) {
+        childrenCache.set(
+          parentId,
+          await this.listChildren(baseSectionId, parentId),
+        );
+      }
+      return childrenCache.get(parentId);
+    };
+
+    const ensureFolder = async (rawItem, parentId, context) => {
+      const item = normalize(rawItem, context);
+      const children = await getChildren(parentId);
+      const existing = children.find(
+        (row) => row.name === item.name && !row.deleted,
+      );
+
+      if (existing) {
+        const needsUpdate =
+          updateExisting &&
+          ((item.comment != null && item.comment !== existing.comment) ||
+            item.description != null ||
+            item.plannedMinutes != null);
+        if (!needsUpdate) {
+          skipped.push({
+            name: item.name,
+            parentSectionId: parentId,
+            docId: existing.docId,
+          });
+          plan.push({
+            action: 'skip',
+            name: item.name,
+            parentSectionId: parentId,
+            docId: existing.docId,
+          });
+          return existing;
+        }
+        if (dryRun) {
+          plan.push({
+            action: 'update',
+            name: item.name,
+            parentSectionId: parentId,
+            docId: existing.docId,
+          });
+          return existing;
+        }
+        await this.updatePoint(existing.docId, {
+          isStage: true,
+          comment: item.comment ?? undefined,
+          description: item.description ?? undefined,
+          plannedMinutes: item.plannedMinutes ?? undefined,
+        });
+        existing.comment = item.comment ?? existing.comment;
+        updated.push({
+          name: item.name,
+          parentSectionId: parentId,
+          docId: existing.docId,
+        });
+        plan.push({
+          action: 'update',
+          name: item.name,
+          parentSectionId: parentId,
+          docId: existing.docId,
+        });
+        if (delayMs > 0) await sleep(delayMs);
+        return existing;
+      }
+
+      if (dryRun) {
+        plan.push({
+          action: 'create',
+          name: item.name,
+          parentSectionId: parentId,
+        });
+        return { name: item.name, structureId: null, docId: null };
+      }
+
+      const stage = await this.createStage({
+        check,
+        checkId,
+        parentSectionId: parentId,
+        name: item.name,
+        comment: item.comment ?? undefined,
+        description: item.description ?? undefined,
+        plannedMinutes: item.plannedMinutes ?? undefined,
+      });
+      const row = {
+        name: item.name,
+        structureId: stage.structureId,
+        docId: stage.id,
+        comment: item.comment,
+        parentStructureId: parentId,
+        deleted: false,
+      };
+      children.push(row);
+      created.push({
+        name: item.name,
+        parentSectionId: parentId,
+        docId: stage.id,
+        structureId: stage.structureId,
+      });
+      plan.push({
+        action: 'create',
+        name: item.name,
+        parentSectionId: parentId,
+        docId: stage.id,
+        structureId: stage.structureId,
+      });
+      if (delayMs > 0) await sleep(delayMs);
+      return row;
+    };
+
+    for (const folder of folders) {
+      try {
+        await ensureFolder(folder, rootParentId, 'верхний уровень');
+      } catch (error) {
+        failed.push({ name: folder?.name ?? null, error: error.message });
+      }
+    }
+
+    for (const group of groups) {
+      let groupRow;
+      try {
+        groupRow = await ensureFolder(group, rootParentId, 'группа');
+      } catch (error) {
+        failed.push({ name: group?.name ?? null, error: error.message });
+        continue;
+      }
+      const groupParentId = groupRow?.structureId ?? null;
+      for (const folder of group?.folders ?? []) {
+        if (groupParentId == null) {
+          try {
+            const item = normalize(folder, `группа «${group.name}»`);
+            plan.push({
+              action: 'create',
+              name: item.name,
+              parentSectionId: null,
+              group: group.name,
+            });
+          } catch (error) {
+            failed.push({ name: folder?.name ?? null, error: error.message });
+          }
+          continue;
+        }
+        try {
+          await ensureFolder(folder, groupParentId, `группа «${group.name}»`);
+        } catch (error) {
+          failed.push({ name: folder?.name ?? null, error: error.message });
+        }
+      }
+    }
+
+    return {
+      check: {
+        id: check.id,
+        guid: check.guid,
+        name: check.name,
+        baseSectionId,
+        structureRootId: check.structureRootId,
+        url: check.url,
+      },
+      parentSectionId: rootParentId,
+      dryRun,
+      plan,
+      planTotals: {
+        create: plan.filter((item) => item.action === 'create').length,
+        update: plan.filter((item) => item.action === 'update').length,
+        skip: plan.filter((item) => item.action === 'skip').length,
+      },
+      created,
+      updated,
+      skipped,
+      failed,
+      totals: {
+        created: created.length,
+        updated: updated.length,
+        skipped: skipped.length,
+        failed: failed.length,
       },
     };
   }

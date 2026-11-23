@@ -1,0 +1,433 @@
+{
+  "source": "https://project.sbis.ru/shared/disk/338178c3-e5ef-498d-95c1-0d6379e76dce",
+  "description": "Структура папок проверки по ТЗ «API локальных контрагентов на прикладных объектах»",
+  "note": "Целевой этап — «Базовые проверки» (structureId 310087900). На 23.11.2026 группы «Внутренние методы» и «Регресс по методам» уже перенесены туда; 49 публичных методов пока лежат в «Новое открытое API» (310088033) и переносятся вручную.",
+  "target": {
+    "checkUrl": "https://online.sbis.ru/doc/01a20880-eb7e-721e-a512-151fedec08fc?client=3",
+    "parentSectionId": 310087900
+  },
+  "folders": [
+    {
+      "name": "IndividualClient.Write",
+      "comment": "Создаёт клиента или обновляет данные по идентификатору"
+    },
+    {
+      "name": "IndividualClient.WriteBulk",
+      "comment": "Массово создаёт клиентов или обновляет по идентификатору"
+    },
+    {
+      "name": "IndividualClient.WriteByKey",
+      "comment": "Создаёт клиента или обновляет данные по естественному ключу"
+    },
+    {
+      "name": "IndividualClient.WriteByKeyBulk",
+      "comment": "Массово создаёт или обновляет клиентов по естественным ключам"
+    },
+    {
+      "name": "IndividualClient.Read",
+      "comment": "Читает данные клиента по идентификатору"
+    },
+    {
+      "name": "IndividualClient.ReadBulk",
+      "comment": "Массово читает клиентов по идентификаторам"
+    },
+    {
+      "name": "IndividualClient.ReadByKey",
+      "comment": "Читает данные клиента по естественному ключу"
+    },
+    {
+      "name": "IndividualClient.ReadByKeyBulk",
+      "comment": "Массово читает клиентов по естественным ключам"
+    },
+    {
+      "name": "IndividualClient.Delete",
+      "comment": "Удаляет клиента по идентификатору (без ссылок — удаление, со ссылками — скрытие)"
+    },
+    {
+      "name": "IndividualClient.DeleteBulk",
+      "comment": "Массово удаляет клиентов по идентификаторам"
+    },
+    {
+      "name": "IndividualClient.DeleteByKey",
+      "comment": "Удаляет клиента по естественному ключу"
+    },
+    {
+      "name": "IndividualClient.DeleteByKeyBulk",
+      "comment": "Массово удаляет клиентов по естественным ключам"
+    },
+    {
+      "name": "IndividualClient.Contacts.List",
+      "comment": "Читает контактные данные клиента"
+    },
+    {
+      "name": "IndividualClient.Contacts.Add",
+      "comment": "Добавляет контактные данные клиента"
+    },
+    {
+      "name": "IndividualClient.Contacts.Update",
+      "comment": "Заменяет контактные данные клиента переданными"
+    },
+    {
+      "name": "IndividualClient.Contacts.Delete",
+      "comment": "Удаляет контактные данные клиента"
+    },
+    {
+      "name": "IndividualClient.Folders.List",
+      "comment": "Читает папки клиента с комментариями добавления"
+    },
+    {
+      "name": "IndividualClient.Folders.Add",
+      "comment": "Добавляет клиента в папки"
+    },
+    {
+      "name": "IndividualClient.Folders.Delete",
+      "comment": "Исключает клиента из папок"
+    },
+    {
+      "name": "Contractor.Write",
+      "comment": "Создаёт контрагента или обновляет данные по идентификатору"
+    },
+    {
+      "name": "Contractor.WriteBulk",
+      "comment": "Массово создаёт контрагентов или обновляет по идентификатору"
+    },
+    {
+      "name": "Contractor.WriteByKey",
+      "comment": "Создаёт контрагента или обновляет данные по естественному ключу"
+    },
+    {
+      "name": "Contractor.WriteByKeyBulk",
+      "comment": "Массово создаёт или обновляет контрагентов по естественным ключам"
+    },
+    {
+      "name": "Contractor.Read",
+      "comment": "Читает данные контрагента по идентификатору"
+    },
+    {
+      "name": "Contractor.ReadBulk",
+      "comment": "Массово читает контрагентов по идентификаторам"
+    },
+    {
+      "name": "Contractor.ReadByKey",
+      "comment": "Читает данные контрагента по естественному ключу"
+    },
+    {
+      "name": "Contractor.ReadByKeyBulk",
+      "comment": "Массово читает контрагентов по естественным ключам"
+    },
+    {
+      "name": "Contractor.Delete",
+      "comment": "Удаляет контрагента по идентификатору"
+    },
+    {
+      "name": "Contractor.DeleteBulk",
+      "comment": "Массово удаляет контрагентов по идентификаторам"
+    },
+    {
+      "name": "Contractor.DeleteByKey",
+      "comment": "Удаляет контрагента по естественному ключу"
+    },
+    {
+      "name": "Contractor.DeleteByKeyBulk",
+      "comment": "Массово удаляет контрагентов по естественным ключам"
+    },
+    {
+      "name": "Contractor.Contacts.List",
+      "comment": "Читает контактные данные и представителей контрагента"
+    },
+    {
+      "name": "Contractor.Contacts.Add",
+      "comment": "Добавляет контактные данные и представителей контрагента"
+    },
+    {
+      "name": "Contractor.Contacts.Update",
+      "comment": "Заменяет контактные данные контрагента переданными"
+    },
+    {
+      "name": "Contractor.Contacts.Delete",
+      "comment": "Удаляет контактные данные контрагента"
+    },
+    {
+      "name": "Contractor.Folders.List",
+      "comment": "Читает папки контрагента с комментариями добавления"
+    },
+    {
+      "name": "Contractor.Folders.Add",
+      "comment": "Добавляет контрагента в папки"
+    },
+    {
+      "name": "Contractor.Folders.Delete",
+      "comment": "Исключает контрагента из папок"
+    },
+    {
+      "name": "FavoriteContractorsSet.List",
+      "comment": "Возвращает список клиентов с фильтрацией, сортировкой и курсорной навигацией"
+    },
+    {
+      "name": "FavoriteContractorFoldersSet.List",
+      "comment": "Возвращает дерево папок клиентов"
+    },
+    {
+      "name": "ContractorFolder.Write",
+      "comment": "Создаёт, изменяет или перемещает папку"
+    },
+    {
+      "name": "ContractorFolder.WriteBulk",
+      "comment": "Массово создаёт или изменяет папки"
+    },
+    {
+      "name": "ContractorFolder.Read",
+      "comment": "Читает папку по идентификатору или UUID"
+    },
+    {
+      "name": "ContractorFolder.ReadBulk",
+      "comment": "Массово читает папки по идентификаторам или UUID"
+    },
+    {
+      "name": "ContractorFolder.ReadRootFolderByKind",
+      "comment": "Читает корневую папку вида"
+    },
+    {
+      "name": "ContractorFolder.Delete",
+      "comment": "Удаляет папку с подпапками"
+    },
+    {
+      "name": "ContractorFolder.DeleteBulk",
+      "comment": "Массово удаляет папки"
+    },
+    {
+      "name": "ClientPurchaseStatistics.Read",
+      "comment": "Читает статистику покупок клиента за период"
+    },
+    {
+      "name": "ClientPurchaseStatistics.ReadBulk",
+      "comment": "Массово читает статистику покупок клиентов за период"
+    }
+  ],
+  "groups": [
+    {
+      "name": "Внутренние методы",
+      "comment": "Прикладные методы БЛ, резолверы и обработчики событий — 40 методов",
+      "folders": [
+        {
+          "name": "IndividualClientAppObj.Write",
+          "comment": "Реализация IndividualClient.Write: создание или изменение физлица через PrivatePersonAPI"
+        },
+        {
+          "name": "IndividualClientAppObj.WriteBulk",
+          "comment": "Массовая реализация IndividualClient.WriteBulk"
+        },
+        {
+          "name": "IndividualClientAppObj.WriteByKey",
+          "comment": "Реализация IndividualClient.WriteByKey: поиск по естественному ключу и запись"
+        },
+        {
+          "name": "IndividualClientAppObj.WriteByKeyBulk",
+          "comment": "Массовая реализация IndividualClient.WriteByKeyBulk"
+        },
+        {
+          "name": "IndividualClientAppObj.Read",
+          "comment": "Реализация IndividualClient.Read: платформенное чтение с учётом Properties"
+        },
+        {
+          "name": "IndividualClientAppObj.ReadBulk",
+          "comment": "Массовая реализация IndividualClient.ReadBulk"
+        },
+        {
+          "name": "IndividualClientAppObj.ReadByKey",
+          "comment": "Реализация IndividualClient.ReadByKey"
+        },
+        {
+          "name": "IndividualClientAppObj.ReadByKeyBulk",
+          "comment": "Массовая реализация IndividualClient.ReadByKeyBulk"
+        },
+        {
+          "name": "IndividualClientAppObj.Delete",
+          "comment": "Реализация IndividualClient.Delete через Контрагент.УдалитьИлиСкрыть"
+        },
+        {
+          "name": "IndividualClientAppObj.DeleteBulk",
+          "comment": "Массовая реализация IndividualClient.DeleteBulk"
+        },
+        {
+          "name": "IndividualClientAppObj.DeleteByKey",
+          "comment": "Реализация IndividualClient.DeleteByKey"
+        },
+        {
+          "name": "IndividualClientAppObj.DeleteByKeyBulk",
+          "comment": "Массовая реализация IndividualClient.DeleteByKeyBulk"
+        },
+        {
+          "name": "IndividualClientAppObj.BasicResolver",
+          "comment": "Резолвер Basic: разбирает составной Id и вызывает PrivatePerson.BasicResolverApplicationObject"
+        },
+        {
+          "name": "IndividualClientAppObj.PhotoResolver",
+          "comment": "Резолвер Photo: разбирает составной Id и вызывает PrivatePerson.GetPhotoApplicationObject"
+        },
+        {
+          "name": "IndividualClientAppObj.ReadClientData",
+          "comment": "Резолвер CRM-полей: PersonId, ExternalId, Responsible, Comment, Deleted, LastActionDate"
+        },
+        {
+          "name": "ContractorFolderAppObj.Write",
+          "comment": "Реализация ContractorFolder.Write поверх CRMClientFolders.Создать и Записать"
+        },
+        {
+          "name": "ContractorFolderAppObj.WriteBulk",
+          "comment": "Массовая реализация ContractorFolder.WriteBulk"
+        },
+        {
+          "name": "ContractorFolderAppObj.Read",
+          "comment": "Реализация ContractorFolder.Read: выборка папки по Id или UUID"
+        },
+        {
+          "name": "ContractorFolderAppObj.ReadBulk",
+          "comment": "Массовая реализация ContractorFolder.ReadBulk"
+        },
+        {
+          "name": "ContractorFolderAppObj.ReadRootFolderByKind",
+          "comment": "Реализация чтения корневой папки вида"
+        },
+        {
+          "name": "ContractorFolderAppObj.Delete",
+          "comment": "Реализация ContractorFolder.Delete поверх CRMClientFolders.Удалить"
+        },
+        {
+          "name": "ContractorFolderAppObj.DeleteBulk",
+          "comment": "Массовая реализация ContractorFolder.DeleteBulk"
+        },
+        {
+          "name": "FavoriteContractorsSetAppObj.List",
+          "comment": "Реализация FavoriteContractorsSet.List: выборка клиентов, папки и статистика строк"
+        },
+        {
+          "name": "FavoriteContractorFoldersSetAppObj.List",
+          "comment": "Реализация FavoriteContractorFoldersSet.List: выборка папок по Parent"
+        },
+        {
+          "name": "ClientFolderLinksAppObj.List",
+          "comment": "Реализация ClientFolderLinks.List: связи клиента с папками и курсор"
+        },
+        {
+          "name": "ClientFolderLinksAppObj.Add",
+          "comment": "Реализация ClientFolderLinks.Add: добавление клиента в папки"
+        },
+        {
+          "name": "ClientFolderLinksAppObj.Delete",
+          "comment": "Реализация ClientFolderLinks.Delete: исключение клиента из папок"
+        },
+        {
+          "name": "ClientFolderLinksAppObj.ReadFirstPages",
+          "comment": "Внутренний orx-метод: первые страницы связей нескольких клиентов одной выборкой"
+        },
+        {
+          "name": "ClientFolderLinksAppObj.OnClientWrite",
+          "comment": "Обработчик события после записи: строки Folders без Id связи"
+        },
+        {
+          "name": "ClientContactsAppObj.List",
+          "comment": "Реализация ClientContacts.List: контактные данные клиента"
+        },
+        {
+          "name": "ClientContactsAppObj.Add",
+          "comment": "Реализация ClientContacts.Add"
+        },
+        {
+          "name": "ClientContactsAppObj.Update",
+          "comment": "Реализация ClientContacts.Update"
+        },
+        {
+          "name": "ClientContactsAppObj.Delete",
+          "comment": "Реализация ClientContacts.Delete"
+        },
+        {
+          "name": "ClientContactsAppObj.ReadFirstPages",
+          "comment": "Внутренний orx-метод: первые страницы контактов нескольких клиентов"
+        },
+        {
+          "name": "ClientContactsAppObj.OnClientWrite",
+          "comment": "Обработчик события после записи: строки Contacts без RowId"
+        },
+        {
+          "name": "ClientPurchaseStatisticsAppObj.Read",
+          "comment": "Реализация ClientPurchaseStatistics.Read за период"
+        },
+        {
+          "name": "ClientPurchaseStatisticsAppObj.ReadBulk",
+          "comment": "Массовая реализация ClientPurchaseStatistics.ReadBulk"
+        },
+        {
+          "name": "CRMConfig.ReadAdditionalFieldsBulk",
+          "comment": "Внутреннее API: массовое чтение дополнительных полей клиентов"
+        },
+        {
+          "name": "CRMConfig.WriteAdditionalFields",
+          "comment": "Внутреннее API: запись дополнительных полей клиента"
+        },
+        {
+          "name": "CRMConfig.OnClientWrite",
+          "comment": "Обработчик события после записи: AdditionalFields"
+        }
+      ]
+    },
+    {
+      "name": "Регресс по методам",
+      "comment": "Регресс существующих методов PrivatePersonAPI и ContactsData — 13 методов",
+      "folders": [
+        {
+          "name": "PrivatePersonAPI.Create",
+          "comment": "Создание частного лица, в том числе с примечанием клиента"
+        },
+        {
+          "name": "PrivatePersonAPI.CreateBatch",
+          "comment": "Массовое создание частных лиц"
+        },
+        {
+          "name": "PrivatePersonAPI.Update",
+          "comment": "Изменение данных частного лица"
+        },
+        {
+          "name": "PrivatePersonAPI.UpdateBatch",
+          "comment": "Массовое изменение данных частных лиц"
+        },
+        {
+          "name": "PrivatePersonAPI.Read",
+          "comment": "Чтение данных частного лица"
+        },
+        {
+          "name": "PrivatePersonAPI.ReadBatch",
+          "comment": "Массовое чтение данных частных лиц"
+        },
+        {
+          "name": "PrivatePersonAPI.Search",
+          "comment": "Поиск частных лиц по ключам"
+        },
+        {
+          "name": "PrivatePersonAPI.Delete",
+          "comment": "Удаление частного лица"
+        },
+        {
+          "name": "ContactsData.List",
+          "comment": "Чтение контактных данных по фильтру"
+        },
+        {
+          "name": "ContactsData.Add",
+          "comment": "Добавление контактных данных"
+        },
+        {
+          "name": "ContactsData.Update",
+          "comment": "Изменение контактных данных"
+        },
+        {
+          "name": "ContactsData.Delete",
+          "comment": "Удаление контактных данных"
+        },
+        {
+          "name": "ContactsData.ListBulk",
+          "comment": "Массовое чтение первых страниц контактов нескольких клиентов"
+        }
+      ]
+    }
+  ]
+}

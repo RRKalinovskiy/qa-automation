@@ -413,6 +413,50 @@ const id = Number(html.match(/"entityKey":"(\d+)"/)[1]);
 
 Ответ — id документа. После записи перечитывайте `ПрочитатьДляУчастника`.
 
+### 9.3. Массовое создание папок
+
+MCP-инструмент `saby_check_stage_bulk_create` и CLI
+`npm run saby:bulk-stages` создают этапы-папки по списку:
+
+```json
+{
+  "folders": [
+    { "name": "IndividualClient.Write", "comment": "Создаёт клиента" }
+  ],
+  "groups": [
+    {
+      "name": "Внутренние методы",
+      "comment": "Методы БЛ",
+      "folders": [
+        { "name": "IndividualClientAppObj.Write", "comment": "Реализация Write" }
+      ]
+    }
+  ]
+}
+```
+
+Правила:
+
+- существующая папка с тем же именем переиспользуется, дубли не создаются;
+- `updateExisting=true` (по умолчанию) обновляет комментарий существующей папки;
+- `dryRun=true` возвращает план `create/update/skip` без записи;
+- группы — такие же этапы, вложенные папки создаются внутри группы;
+- для вложенной проверки базовый раздел и родитель определяются автоматически;
+- `parentSectionId` — `structureId` родителя, по умолчанию корень проверки.
+
+CLI:
+
+```bash
+npm run saby:bulk-stages -- \
+  --check https://online.sbis.ru/doc/<guid>?client=3 \
+  --parent 310088033 \
+  --file docs/scenarios/api-local-contractors-folders.json \
+  --dry-run
+```
+
+Для записи уберите `--dry-run`. Если в карточке нет сотрудника/подразделения,
+задайте `SABY_EMPLOYEE_ID`/`SABY_DEPARTMENT_ID`.
+
 ## 10. Статусы
 
 Смена статуса — отдельный метод, не `Записать`:

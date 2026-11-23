@@ -114,6 +114,16 @@ const pointRef = z
   .union([z.string(), z.number()])
   .describe('id пункта/этапа (документа), не структуры');
 
+const stageFolderInput = z.object({
+  name: z.string().min(1).describe('Точное название папки (без префиксов ТК/ЧЛ/Т)'),
+  comment: z
+    .string()
+    .optional()
+    .describe('Короткое описание — поле «Общее описание» → «Комментарий»'),
+  description: z.string().optional().describe('Длинное описание папки'),
+  plannedMinutes: z.number().int().min(0).max(6000).optional(),
+});
+
 server.registerTool(
   'saby_check_get',
   {
@@ -506,6 +516,51 @@ server.registerTool(
         plannedMinutes: input.plannedMinutes,
       });
       return ok({ check: compactCheck(checkInfo), stage: compactPoint(stage) });
+    } catch (error) {
+      return fail(error);
+    }
+  },
+);
+
+server.registerTool(
+  'saby_check_stage_bulk_create',
+  {
+    title: 'Массово создать папки (этапы)',
+    description:
+      'Создаёт папки-этапы по списку: верхнеуровневые folders и groups с вложенными folders. ' +
+      'comment — короткое описание («Общее описание» → «Комментарий»). ' +
+      'Существующие папки с тем же именем переиспользуются; updateExisting=true обновляет комментарий. ' +
+      'dryRun=true показывает план без записи. parentSectionId — structureId родителя; ' +
+      'для вложенной проверки по умолчанию используется её structureRootId.',
+    inputSchema: z.object({
+      check: checkRef,
+      parentSectionId: z.number().int().positive().optional(),
+      folders: z.array(stageFolderInput).default([]),
+      groups: z
+        .array(
+          stageFolderInput.extend({
+            folders: z.array(stageFolderInput).default([]),
+          }),
+        )
+        .default([]),
+      updateExisting: z.boolean().default(true),
+      dryRun: z.boolean().default(false),
+      delayMs: z.number().int().min(0).max(5000).default(100),
+    }),
+  },
+  async (input) => {
+    try {
+      const checkInfo = await getService().resolveCheck(input.check);
+      const result = await getService().bulkCreateStages({
+        check: checkInfo,
+        parentSectionId: input.parentSectionId,
+        folders: input.folders,
+        groups: input.groups,
+        updateExisting: input.updateExisting,
+        dryRun: input.dryRun,
+        delayMs: input.delayMs,
+      });
+      return ok(result);
     } catch (error) {
       return fail(error);
     }

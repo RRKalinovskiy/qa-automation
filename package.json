@@ -15,6 +15,7 @@
     "report": "playwright show-report",
     "saby:login": "node scripts/saby-login.mjs",
     "saby:session": "node scripts/saby-session.mjs",
+    "saby:bulk-stages": "node scripts/saby-bulk-stages.mjs",
     "mcp:saby": "node mcp/saby-checks/server.mjs"
   },
   "devDependencies": {

@@ -253,6 +253,52 @@ test('createStage создаёт этап с флагами раздела и п
   assert.equal(update['ЧеклистСтруктура.ПлановоеВремя'], 'P0DT0H30M0S');
 });
 
+test('bulkCreateStages dryRun строит план групп и вложенных папок', async () => {
+  const client = new FakeClient();
+  const service = new CheckService(client);
+  const result = await service.bulkCreateStages({
+    checkId: 10,
+    parentSectionId: 100,
+    folders: [{ name: 'Новая папка', comment: 'Описание папки' }],
+    groups: [
+      {
+        name: 'Группа',
+        comment: 'Описание группы',
+        folders: [{ name: 'Вложенная', comment: 'Описание вложенной' }],
+      },
+    ],
+    dryRun: true,
+  });
+
+  assert.equal(result.dryRun, true);
+  assert.equal(result.plan.length, 3);
+  assert.ok(result.plan.every((item) => item.action === 'create'));
+  assert.equal(result.created.length, 0);
+  assert.equal(client.created.size, 0);
+  assert.ok(
+    !client.calls.some((call) => call.method === 'ПунктПроверки.Создать'),
+  );
+});
+
+test('bulkCreateStages создаёт папку и записывает комментарий', async () => {
+  const client = new FakeClient();
+  const service = new CheckService(client);
+  const result = await service.bulkCreateStages({
+    checkId: 10,
+    parentSectionId: 100,
+    folders: [{ name: 'Новая папка', comment: 'Описание папки' }],
+  });
+
+  assert.equal(result.created.length, 1);
+  assert.equal(result.created[0].docId, 300);
+  assert.equal(result.updated.length, 0);
+  assert.equal(result.failed.length, 0);
+  assert.equal(
+    client.updated.get(300)['ЧеклистСтруктура.Комментарий'],
+    'Описание папки',
+  );
+});
+
 test('createPoint по умолчанию создаёт ЧЛ с двумя идеями и пометкой ПК', async () => {
   const client = new FakeClient();
   const service = new CheckService(client);
